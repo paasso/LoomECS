@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # Default = no SIMD packages. simd = optional LOOM_SIMD mask paths.
+        profile: [default, simd]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        run: dotnet restore Loom.sln
+
+      - name: Build (default)
+        if: matrix.profile == 'default'
+        run: dotnet build Loom.sln -c Release --no-restore -warnaserror
+
+      - name: Test (default)
+        if: matrix.profile == 'default'
+        run: dotnet test Loom.sln -c Release --no-build --verbosity normal
+
+      - name: Pack (LoomECS + Serialization)
+        if: matrix.profile == 'default'
+        run: |
+          dotnet pack src/Loom/Loom.csproj -c Release --no-build -o artifacts/nuget
+          dotnet pack src/Loom.Serialization/Loom.Serialization.csproj -c Release --no-build -o artifacts/nuget
+          ls -la artifacts/nuget
+
+      - name: Upload nupkg
+        if: matrix.profile == 'default'
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget
+          path: artifacts/nuget/*
+
+      - name: Build + test (LoomSimd)
+        if: matrix.profile == 'simd'
+        run: |
+          dotnet restore src/Loom/Loom.csproj -p:LoomSimd=true
+          dotnet test tests/Loom.Tests/Loom.Tests.csproj -c Release -p:LoomSimd=true -warnaserror --verbosity normal
+          dotnet test tests/Loom.GeneratorTests/Loom.GeneratorTests.csproj -c Release -warnaserror --verbosity normal

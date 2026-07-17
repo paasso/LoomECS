@@ -1,0 +1,21 @@
+{
+  "name": "Loom.Unity.Editor",
+  "rootNamespace": "Loom.Unity.Editor",
+  "references": [
+    "Loom.Unity",
+    "Loom"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [
+    "Loom.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

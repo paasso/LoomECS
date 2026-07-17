@@ -1,0 +1,19 @@
+{
+  "name": "Loom.Unity.Samples.HordeRush",
+  "rootNamespace": "Loom.Unity.Samples.HordeRush",
+  "references": [
+    "Loom.Unity",
+    "Loom"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [
+    "Loom.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

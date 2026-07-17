@@ -1,0 +1,24 @@
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <Authors>paasso</Authors>
+    <Company>paasso</Company>
+    <Copyright>Copyright (c) 2026 paasso</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/paasso/LoomECS</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/paasso/LoomECS.git</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>ecs;entity-component-system;game;archetype;sparse-set;dotnet</PackageTags>
+    <Version>0.1.0</Version>
+    <IsPackable>false</IsPackable>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- Analyzers + style: EditorConfig drives severities; CI fails on warnings. -->
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <TreatWarningsAsErrors Condition="'$(CI)' == 'true' or '$(GITHUB_ACTIONS)' == 'true'">true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>

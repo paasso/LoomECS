@@ -1,0 +1,63 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Loom</RootNamespace>
+    <AssemblyName>Loom</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>LoomECS</PackageId>
+    <Title>Loom ECS</Title>
+    <Description>Minimal hybrid C# ECS: archetype columns for dense data, sparse-set storage for high-churn components, systems, commands, and events. Includes the Loom.Generators Roslyn analyzer. Optional snapshots: LoomECS.Serialization.</Description>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageIcon>loom-logo.png</PackageIcon>
+    <PackageReleaseNotes>Initial NuGet release of LoomECS (hybrid archetype + sparse-set ECS).</PackageReleaseNotes>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <!-- Optional safe SIMD for ComponentMask: -p:LoomSimd=true (source builds; NuGet ships the default safe build). -->
+    <LoomSimd Condition="'$(LoomSimd)' == ''">false</LoomSimd>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(LoomSimd)' == 'true'">
+    <DefineConstants>$(DefineConstants);LOOM_SIMD</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+    <!-- Used by Chunk.GetItems (iteration hot path); also pulled for optional LoomSimd builds. -->
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(LoomSimd)' == 'true'">
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+  </ItemGroup>
+
+  <!-- Local builds wire the generator as an analyzer; NuGet pack embeds the DLL under analyzers/. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Loom.Generators\Loom.Generators.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false"
+                      PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\loom-logo.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);_PackLoomGenerator</TargetsForTfmSpecificContentInPackage>
+    <_LoomGeneratorDll>$(MSBuildThisFileDirectory)..\Loom.Generators\bin\$(Configuration)\netstandard2.0\Loom.Generators.dll</_LoomGeneratorDll>
+  </PropertyGroup>
+
+  <Target Name="_PackLoomGenerator">
+    <Error Condition="!Exists('$(_LoomGeneratorDll)')"
+           Text="Loom.Generators.dll not found at '$(_LoomGeneratorDll)'. Build Loom.Generators before packing." />
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(_LoomGeneratorDll)" PackagePath="analyzers/dotnet/cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>

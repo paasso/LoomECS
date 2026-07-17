@@ -1,0 +1,37 @@
+{
+  "name": "com.loom.ecs",
+  "version": "0.1.0",
+  "displayName": "Loom",
+  "description": "Unity embedding for Loom ECS: world runner, entity GameObject link, Entity Debugger, and Basic Runner / Flappy Bird / Speed Demo / HordeRush samples.",
+  "unity": "2021.3",
+  "documentationUrl": "https://github.com/paasso/LoomECS/blob/master/integrations/Unity/com.loom.ecs/README.md",
+  "changelogUrl": "https://github.com/paasso/LoomECS/blob/master/README.md",
+  "licensesUrl": "https://github.com/paasso/LoomECS/blob/master/LICENSE",
+  "keywords": ["ecs", "loom", "debugger", "entities", "sample"],
+  "author": {
+    "name": "paasso",
+    "url": "https://github.com/paasso/LoomECS"
+  },
+  "samples": [
+    {
+      "displayName": "Basic Runner",
+      "description": "Spawns moving UnityPosition entities and syncs optional EntityBehaviour views.",
+      "path": "Samples~/BasicRunner"
+    },
+    {
+      "displayName": "Flappy Bird",
+      "description": "Playable Flappy Bird–style demo with project textures for environment, bird, and pipes.",
+      "path": "Samples~/FlappyBird"
+    },
+    {
+      "displayName": "Speed Demo",
+      "description": "Stress test with ParallelEach, sparse churn, and DrawMeshInstancedIndirect particles.",
+      "path": "Samples~/SpeedDemo"
+    },
+    {
+      "displayName": "Horde Rush",
+      "description": "Twin-stick horde demo with project textures: ParallelEach, sparse Lifetime/HitFlash, shared EnemyKind, CommandBuffer combat.",
+      "path": "Samples~/HordeRush"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Extract version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        run: dotnet test Loom.sln -c Release --verbosity normal
+
+      - name: Pack
+        run: |
+          VER="${{ steps.ver.outputs.version }}"
+          dotnet pack src/Loom/Loom.csproj -c Release -o artifacts/nuget \
+            -p:Version=$VER -p:PackageVersion=$VER
+          dotnet pack src/Loom.Serialization/Loom.Serialization.csproj -c Release -o artifacts/nuget \
+            -p:Version=$VER -p:PackageVersion=$VER
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-${{ steps.ver.outputs.version }}
+          path: artifacts/nuget/*
+
+      - name: Push to NuGet.org
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        run: |
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY secret not set — skipping push (nupkg uploaded as artifact)."
+            exit 0
+          fi
+          dotnet nuget push artifacts/nuget/*.nupkg \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- net8.0 alongside netstandard2.1: MemoryPack's netstandard and net7+ builds are not
+         interchangeable; consumers on modern TFMs must resolve the matching MemoryPack assembly. -->
+    <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Loom</RootNamespace>
+    <AssemblyName>Loom.Serialization</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>LoomECS.Serialization</PackageId>
+    <Title>Loom ECS Serialization</Title>
+    <Description>Optional JSON and MemoryPack world snapshots for LoomECS, including component/singleton data migrations and document format migrations.</Description>
+    <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
+    <PackageIcon>loom-logo.png</PackageIcon>
+    <PackageReleaseNotes>Initial NuGet release of LoomECS.Serialization (WorldSerializer + migrations).</PackageReleaseNotes>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageTags>ecs;entity-component-system;serialization;snapshot;migration;memorypack;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MemoryPack" Version="1.21.4" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Loom\Loom.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="PACKAGE.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\loom-logo.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

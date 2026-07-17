@@ -1,0 +1,19 @@
+{
+  "name": "Loom.Unity.Samples.FlappyBird",
+  "rootNamespace": "Loom.Unity.Samples.FlappyBird",
+  "references": [
+    "Loom.Unity",
+    "Loom"
+  ],
+  "includePlatforms": [],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [
+    "Loom.dll"
+  ],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}
