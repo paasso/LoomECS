@@ -9,7 +9,7 @@
     <RepositoryUrl>https://github.com/paasso/LoomECS.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageTags>ecs;entity-component-system;game;archetype;sparse-set;dotnet</PackageTags>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <IsPackable>false</IsPackable>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
