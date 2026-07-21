@@ -20,7 +20,9 @@ dotnet_sort_system_directives_first = true
 dotnet_separate_import_directive_groups = false
 
 # Diagnostics (IDE / compiler)
-dotnet_diagnostic.IDE0005.severity = warning
+# .NET 10 requires GenerateDocumentationFile for this analyzer in command-line builds.
+# Keep redundant-usings cleanup available through IDE tooling without blocking CI.
+dotnet_diagnostic.IDE0005.severity = none
 dotnet_diagnostic.CS1591.severity = none
 # Relation Target fields are written via reflection (RelationAccess).
 dotnet_diagnostic.CS0649.severity = suggestion

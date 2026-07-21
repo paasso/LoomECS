@@ -5,8 +5,6 @@
     <LangVersion>latest</LangVersion>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
-    <!-- IDE0005 requires a documentation file during compilation; generators do not publish API docs. -->
-    <EnforceCodeStyleInBuild>false</EnforceCodeStyleInBuild>
     <IncludeBuildOutput>false</IncludeBuildOutput>
     <RootNamespace>Loom.Generators</RootNamespace>
     <AssemblyName>Loom.Generators</AssemblyName>
