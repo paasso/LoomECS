@@ -1,9 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net8.0 alongside netstandard2.1: MemoryPack's netstandard and net7+ builds are not
+    <!-- net10.0 alongside netstandard2.1: MemoryPack's netstandard and net7+ builds are not
          interchangeable; consumers on modern TFMs must resolve the matching MemoryPack assembly. -->
-    <TargetFrameworks>netstandard2.1;net8.0</TargetFrameworks>
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
     <LangVersion>10.0</LangVersion>
     <ImplicitUsings>disable</ImplicitUsings>
     <RootNamespace>Loom</RootNamespace>
