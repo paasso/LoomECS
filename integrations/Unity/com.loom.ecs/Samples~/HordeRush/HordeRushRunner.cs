@@ -1,4 +1,6 @@
 using Loom;
+using Loom.Entities;
+using Loom.Systems;
 using Loom.Unity;
 using UnityEngine;
 

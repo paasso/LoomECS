@@ -1,4 +1,5 @@
 using Loom;
+using Loom.Entities;
 using UnityEditor;
 using UnityEngine;
 

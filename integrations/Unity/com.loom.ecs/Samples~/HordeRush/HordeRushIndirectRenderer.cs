@@ -1,4 +1,5 @@
 using Loom;
+using Loom.Entities;
 using UnityEngine;
 using UnityEngine.Rendering;
 

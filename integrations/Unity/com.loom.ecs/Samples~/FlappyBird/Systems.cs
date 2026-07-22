@@ -1,5 +1,8 @@
 using System;
 using Loom;
+using Loom.Commands;
+using Loom.Entities;
+using Loom.Systems;
 
 namespace Loom.Unity.Samples.FlappyBird
 {

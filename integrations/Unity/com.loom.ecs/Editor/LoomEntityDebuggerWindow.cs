@@ -3,6 +3,9 @@ using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
 using Loom;
+using Loom.Components;
+using Loom.Entities;
+using Loom.Systems;
 using UnityEditor;
 using UnityEngine;
 

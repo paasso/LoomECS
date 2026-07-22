@@ -1,5 +1,8 @@
 using System;
 using Loom;
+using Loom.Commands;
+using Loom.Entities;
+using Loom.Systems;
 using UnityEngine;
 
 namespace Loom.Unity.Samples.HordeRush

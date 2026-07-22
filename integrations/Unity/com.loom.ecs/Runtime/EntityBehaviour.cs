@@ -1,3 +1,4 @@
+using Loom.Entities;
 using UnityEngine;
 
 namespace Loom.Unity

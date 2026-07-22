@@ -1,4 +1,4 @@
-using Loom;
+using Loom.Components;
 
 namespace Loom.Unity.Samples.HordeRush
 {
