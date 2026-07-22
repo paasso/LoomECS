@@ -9,6 +9,8 @@ namespace Loom.Net
         Snapshot = 1,
         Delta = 2,
         Command = 3,
+        /// <summary>Client → server request for a full <see cref="Snapshot"/> (join / resync).</summary>
+        SnapshotRequest = 4,
     }
 
     /// <summary>Minimal envelope: kind + tick + payload. Not required by SnapshotSync/DeltaSync
