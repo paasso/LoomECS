@@ -321,6 +321,159 @@ namespace Loom
             _liveCount += count;
         }
 
+        /// <summary>Creates <paramref name="destination"/>.Length entities each carrying the same
+        /// three components — see <see cref="CreateMany"/> and <see cref="Create{T1,T2,T3}"/>.</summary>
+        public void CreateMany<T1, T2, T3>(
+            Span<Entity> destination, T1 component1, T2 component2, T3 component3)
+            where T1 : struct where T2 : struct where T3 : struct
+        {
+            int count = destination.Length;
+            if (count == 0)
+                return;
+
+            var info1 = _componentTypes.GetOrRegister<T1>();
+            var info2 = _componentTypes.GetOrRegister<T2>();
+            var info3 = _componentTypes.GetOrRegister<T3>();
+
+            var archetype = _emptyArchetype;
+            if (!ComponentTypeTraits<T1>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info1.Id);
+            if (!ComponentTypeTraits<T2>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info2.Id);
+            if (!ComponentTypeTraits<T3>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info3.Id);
+
+            PrefetchCreateCapacity(count, archetype);
+
+            bool t1DenseData = !ComponentTypeTraits<T1>.UsesSparseMask && !ComponentTypeTraits<T1>.IsEmpty;
+            bool t2DenseData = !ComponentTypeTraits<T2>.UsesSparseMask && !ComponentTypeTraits<T2>.IsEmpty;
+            bool t3DenseData = !ComponentTypeTraits<T3>.UsesSparseMask && !ComponentTypeTraits<T3>.IsEmpty;
+
+            if (t1DenseData && t2DenseData && t3DenseData)
+            {
+                int col1 = archetype.ColumnIndex(info1.Id);
+                int col2 = archetype.ColumnIndex(info2.Id);
+                int col3 = archetype.ColumnIndex(info3.Id);
+                Chunk? currentChunk = null;
+                T1[]? items1 = null;
+                T2[]? items2 = null;
+                T3[]? items3 = null;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = AllocateEntityId();
+                    ref var rec = ref _records[entity.Id];
+                    rec.Archetype = archetype;
+                    var (row, chunk, index) = archetype.AddEntityRow(entity);
+                    rec.Row = row;
+                    if (!ReferenceEquals(chunk, currentChunk))
+                    {
+                        currentChunk = chunk;
+                        items1 = chunk.GetItems<T1>(col1);
+                        items2 = chunk.GetItems<T2>(col2);
+                        items3 = chunk.GetItems<T3>(col3);
+                    }
+
+                    items1![index] = component1;
+                    items2![index] = component2;
+                    items3![index] = component3;
+                    destination[i] = entity;
+                    RecordAdded<T1>(entity);
+                    RecordAdded<T2>(entity);
+                    RecordAdded<T3>(entity);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = AllocateEntityId();
+                    var (chunk, index) = PlaceInArchetype(entity, archetype);
+                    SetNewComponent(entity, archetype, chunk, index, info1.Id, component1);
+                    SetNewComponent(entity, archetype, chunk, index, info2.Id, component2);
+                    SetNewComponent(entity, archetype, chunk, index, info3.Id, component3);
+                    destination[i] = entity;
+                }
+            }
+
+            _liveCount += count;
+        }
+
+        /// <summary>Same as <see cref="CreateMany{T1,T2,T3}(Span{Entity},T1,T2,T3)"/> but does not
+        /// write created ids into a caller buffer — prefer this when you only need the entities to
+        /// exist (e.g. bulk spawn measured by <see cref="EntityCount"/>).</summary>
+        public void CreateMany<T1, T2, T3>(int count, T1 component1, T2 component2, T3 component3)
+            where T1 : struct where T2 : struct where T3 : struct
+        {
+            if (count <= 0)
+                return;
+
+            var info1 = _componentTypes.GetOrRegister<T1>();
+            var info2 = _componentTypes.GetOrRegister<T2>();
+            var info3 = _componentTypes.GetOrRegister<T3>();
+
+            var archetype = _emptyArchetype;
+            if (!ComponentTypeTraits<T1>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info1.Id);
+            if (!ComponentTypeTraits<T2>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info2.Id);
+            if (!ComponentTypeTraits<T3>.UsesSparseMask)
+                archetype = GetArchetypeViaAddEdge(archetype, info3.Id);
+
+            PrefetchCreateCapacity(count, archetype);
+
+            bool t1DenseData = !ComponentTypeTraits<T1>.UsesSparseMask && !ComponentTypeTraits<T1>.IsEmpty;
+            bool t2DenseData = !ComponentTypeTraits<T2>.UsesSparseMask && !ComponentTypeTraits<T2>.IsEmpty;
+            bool t3DenseData = !ComponentTypeTraits<T3>.UsesSparseMask && !ComponentTypeTraits<T3>.IsEmpty;
+
+            if (t1DenseData && t2DenseData && t3DenseData)
+            {
+                int col1 = archetype.ColumnIndex(info1.Id);
+                int col2 = archetype.ColumnIndex(info2.Id);
+                int col3 = archetype.ColumnIndex(info3.Id);
+                Chunk? currentChunk = null;
+                T1[]? items1 = null;
+                T2[]? items2 = null;
+                T3[]? items3 = null;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = AllocateEntityId();
+                    ref var rec = ref _records[entity.Id];
+                    rec.Archetype = archetype;
+                    var (row, chunk, index) = archetype.AddEntityRow(entity);
+                    rec.Row = row;
+                    if (!ReferenceEquals(chunk, currentChunk))
+                    {
+                        currentChunk = chunk;
+                        items1 = chunk.GetItems<T1>(col1);
+                        items2 = chunk.GetItems<T2>(col2);
+                        items3 = chunk.GetItems<T3>(col3);
+                    }
+
+                    items1![index] = component1;
+                    items2![index] = component2;
+                    items3![index] = component3;
+                    RecordAdded<T1>(entity);
+                    RecordAdded<T2>(entity);
+                    RecordAdded<T3>(entity);
+                }
+            }
+            else
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = AllocateEntityId();
+                    var (chunk, index) = PlaceInArchetype(entity, archetype);
+                    SetNewComponent(entity, archetype, chunk, index, info1.Id, component1);
+                    SetNewComponent(entity, archetype, chunk, index, info2.Id, component2);
+                    SetNewComponent(entity, archetype, chunk, index, info3.Id, component3);
+                }
+            }
+
+            _liveCount += count;
+        }
+
         /// <summary>Destroys every entity in <paramref name="entities"/>. Each entry is handled by
         /// <see cref="Destroy"/> (cascading children, sparse cleanup, id recycle) — this is a
         /// convenience loop, not a separate bulk path, so order and hierarchy semantics match
@@ -421,7 +574,7 @@ namespace Loom
                 ref var mask = ref GetOrCreateSparseMaskRef(entity.Id);
                 if (mask.Get(info.Id))
                     throw new InvalidOperationException($"{entity} already has component {typeof(T).Name}.");
-                mask = mask.With(info.Id);
+                ComponentMask.SetBit(ref mask, info.Id);
                 // Empty (tag) types have nothing to store — every instance is indistinguishable,
                 // so no value store is created; the mask bit above is the whole story.
                 if (ComponentTypeTraits<T>.IsEmpty)
@@ -460,7 +613,7 @@ namespace Loom
                 ref var mask = ref _sparseMasks.GetRef(entity.Id);
                 if (!mask.Get(info.Id))
                     return false;
-                mask = mask.Without(info.Id);
+                ComponentMask.ClearBit(ref mask, info.Id);
                 // Deliberately not pruning the SparseSet<ComponentMask> entry even if the mask is
                 // now Empty — that would need its own swap-back removal on every Remove call. An
                 // Empty mask sitting in a reused slot is harmless (GetSparseMask/Has still answer
@@ -473,12 +626,12 @@ namespace Loom
                 }
                 if (ComponentTypeTraits<T>.IsShared)
                 {
-                    bool sharedRemoved = _sharedStoresByComponentId[info.Id].Remove(entity.Id);
+                    bool sharedRemoved = GetOrCreateSharedStore<T>(info.Id).Remove(entity.Id);
                     if (sharedRemoved)
                         RecordRemoved<T>(entity);
                     return sharedRemoved;
                 }
-                bool sparseRemoved = _sparseSetsByComponentId[info.Id].Remove(entity.Id);
+                bool sparseRemoved = GetOrCreateSparseSet<T>(info.Id).Remove(entity.Id);
                 if (sparseRemoved)
                     RecordRemoved<T>(entity);
                 return sparseRemoved;
@@ -491,6 +644,74 @@ namespace Loom
             if (denseRemoved)
                 RecordRemoved<T>(entity);
             return denseRemoved;
+        }
+
+        /// <summary>Adds <typeparamref name="T"/> to every entity in <paramref name="entities"/>.
+        /// When all targets share one archetype and the span covers that archetype entirely, the
+        /// transition copies shared columns in one pass and clears the source without per-entity
+        /// swap-back relocation.</summary>
+        public void AddMany<T>(ReadOnlySpan<Entity> entities, T value = default) where T : struct
+        {
+            int count = entities.Length;
+            if (count == 0)
+                return;
+
+            if (ComponentTypeTraits<T>.UsesSparseMask)
+            {
+                for (int i = 0; i < count; i++)
+                    Add(entities[i], value);
+                return;
+            }
+
+            var info = _componentTypes.GetOrRegister<T>();
+            if (!TryGetHomogeneousDenseSource(entities, info.Id, requirePresent: false, out var from))
+            {
+                for (int i = 0; i < count; i++)
+                    Add(entities[i], value);
+                return;
+            }
+
+            var edge = GetAddEdge(from, info.Id);
+            if (count == from.Count)
+            {
+                TransitionEntireArchetype(from, edge, info.Id, add: true, value);
+                return;
+            }
+
+            TransitionPartialDescending(entities, from, edge, info.Id, add: true, value);
+        }
+
+        /// <summary>Removes <typeparamref name="T"/> from every entity in <paramref name="entities"/>.
+        /// Same whole-archetype fast path as <see cref="AddMany{T}"/> when applicable.</summary>
+        public void RemoveMany<T>(ReadOnlySpan<Entity> entities) where T : struct
+        {
+            int count = entities.Length;
+            if (count == 0)
+                return;
+
+            if (ComponentTypeTraits<T>.UsesSparseMask)
+            {
+                for (int i = 0; i < count; i++)
+                    Remove<T>(entities[i]);
+                return;
+            }
+
+            var info = _componentTypes.GetOrRegister<T>();
+            if (!TryGetHomogeneousDenseSource(entities, info.Id, requirePresent: true, out var from))
+            {
+                for (int i = 0; i < count; i++)
+                    Remove<T>(entities[i]);
+                return;
+            }
+
+            var edge = GetRemoveEdge(from, info.Id);
+            if (count == from.Count)
+            {
+                TransitionEntireArchetype(from, edge, info.Id, add: false, default(T));
+                return;
+            }
+
+            TransitionPartialDescending(entities, from, edge, info.Id, add: false, default(T));
         }
 
         public ref T Get<T>(Entity entity) where T : struct
@@ -784,6 +1005,152 @@ namespace Loom
             return (toRow, toChunk, toIndex);
         }
 
+        private bool TryGetHomogeneousDenseSource(
+            ReadOnlySpan<Entity> entities, int componentId, bool requirePresent, out Archetype from)
+        {
+            from = null!;
+            RequireAlive(entities[0]);
+            RequirePlaced(entities[0]);
+            from = _records[entities[0].Id].Archetype!;
+            bool firstHas = from.Mask.Get(componentId);
+            if (requirePresent ? !firstHas : firstHas)
+                return false;
+
+            for (int i = 1; i < entities.Length; i++)
+            {
+                RequireAlive(entities[i]);
+                if (!ReferenceEquals(_records[entities[i].Id].Archetype, from))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private void TransitionEntireArchetype<T>(
+            Archetype from, ArchetypeEdge edge, int componentId, bool add, T value)
+            where T : struct
+        {
+            var to = edge.Target!;
+            int n = from.Count;
+            int toStartRow = to.Count;
+            to.EnsureRowCapacity(n);
+
+            var fromCols = edge.FromColumnIndices;
+            var toCols = edge.ToColumnIndices;
+            bool writeAddedValue = add && !ComponentTypeTraits<T>.IsEmpty;
+            int valueCol = writeAddedValue ? to.ColumnIndex(componentId) : -1;
+
+            // Place every entity into the target first (packed append), then bulk-copy columns.
+            for (int row = 0; row < n; row++)
+            {
+                var (fromChunk, fromIndex) = from.Locate(row);
+                var entity = fromChunk.Entities[fromIndex];
+                var (toRow, _, _) = to.AddEntityRow(entity);
+
+                ref var rec = ref _records[entity.Id];
+                rec.Archetype = to;
+                rec.Row = toRow;
+
+                if (add)
+                    RecordAdded<T>(entity);
+                else
+                    RecordRemoved<T>(entity);
+            }
+
+            for (int c = 0; c < fromCols.Length; c++)
+                CopyArchetypeColumnRange(from, fromCols[c], 0, to, toCols[c], toStartRow, n);
+
+            if (writeAddedValue)
+            {
+                int remaining = n;
+                int toRow = toStartRow;
+                while (remaining > 0)
+                {
+                    var (chunk, index) = to.Locate(toRow);
+                    int run = Math.Min(remaining, Archetype.ChunkCapacity - index);
+                    var items = chunk.GetItems<T>(valueCol);
+                    for (int i = 0; i < run; i++)
+                        items[index + i] = value;
+                    toRow += run;
+                    remaining -= run;
+                }
+            }
+
+            from.ClearAllRows();
+        }
+
+        private static void CopyArchetypeColumnRange(
+            Archetype from, int fromCol, int fromRowStart,
+            Archetype to, int toCol, int toRowStart, int count)
+        {
+            int remaining = count;
+            int fromRow = fromRowStart;
+            int toRow = toRowStart;
+            while (remaining > 0)
+            {
+                var (fromChunk, fromIndex) = from.Locate(fromRow);
+                var (toChunk, toIndex) = to.Locate(toRow);
+                int run = remaining;
+                int fromRoom = Archetype.ChunkCapacity - fromIndex;
+                int toRoom = Archetype.ChunkCapacity - toIndex;
+                if (fromRoom < run) run = fromRoom;
+                if (toRoom < run) run = toRoom;
+
+                fromChunk.Columns[fromCol].CopyRange(fromIndex, toChunk.Columns[toCol], toIndex, run);
+                fromRow += run;
+                toRow += run;
+                remaining -= run;
+            }
+        }
+
+        private void TransitionPartialDescending<T>(
+            ReadOnlySpan<Entity> entities, Archetype from, ArchetypeEdge edge, int componentId, bool add, T value)
+            where T : struct
+        {
+            int count = entities.Length;
+            var order = System.Buffers.ArrayPool<int>.Shared.Rent(count);
+            var rows = System.Buffers.ArrayPool<int>.Shared.Rent(count);
+            try
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    order[i] = i;
+                    rows[i] = _records[entities[i].Id].Row;
+                }
+
+                System.Array.Sort(rows, order, 0, count);
+                // Highest row first so RemoveRowSwapBack often hits the cheap last-row path.
+                System.Array.Reverse(rows, 0, count);
+                System.Array.Reverse(order, 0, count);
+
+                bool writeAddedValue = add && !ComponentTypeTraits<T>.IsEmpty;
+                var to = edge.Target!;
+
+                for (int i = 0; i < count; i++)
+                {
+                    var entity = entities[order[i]];
+                    int fromRow = _records[entity.Id].Row;
+                    var (newRow, chunk, index) = MoveEntity(entity, from, fromRow, edge);
+                    ref var rec = ref _records[entity.Id];
+                    rec.Archetype = to;
+                    rec.Row = newRow;
+
+                    if (writeAddedValue)
+                        to.GetColumn<T>(componentId, chunk).Items[index] = value;
+
+                    if (add)
+                        RecordAdded<T>(entity);
+                    else
+                        RecordRemoved<T>(entity);
+                }
+            }
+            finally
+            {
+                System.Buffers.ArrayPool<int>.Shared.Return(order);
+                System.Buffers.ArrayPool<int>.Shared.Return(rows);
+            }
+        }
+
         /// <summary>Walks/creates the cached add-edge for <paramref name="componentId"/>. Create
         /// paths only need the target archetype; Add/Remove also need the edge's column mapping for
         /// <see cref="MoveEntity"/>.</summary>
@@ -851,22 +1218,54 @@ namespace Loom
         /// duplicating its storage.</summary>
         internal SparseSet<T> GetOrCreateSparseSet<T>(int id) where T : struct
         {
+            if (ReferenceEquals(SparseStoreCache<T>.World, this))
+                return SparseStoreCache<T>.Store!;
+
             if (_sparseSetsByComponentId.TryGetValue(id, out var existing))
-                return (SparseSet<T>)existing;
+            {
+                var typed = (SparseSet<T>)existing;
+                SparseStoreCache<T>.World = this;
+                SparseStoreCache<T>.Store = typed;
+                return typed;
+            }
 
             var created = new SparseSet<T>();
             _sparseSetsByComponentId[id] = created;
+            SparseStoreCache<T>.World = this;
+            SparseStoreCache<T>.Store = created;
             return created;
         }
 
         internal SharedComponentStore<T> GetOrCreateSharedStore<T>(int id) where T : struct
         {
+            if (ReferenceEquals(SharedStoreCache<T>.World, this))
+                return SharedStoreCache<T>.Store!;
+
             if (_sharedStoresByComponentId.TryGetValue(id, out var existing))
-                return (SharedComponentStore<T>)existing;
+            {
+                var typed = (SharedComponentStore<T>)existing;
+                SharedStoreCache<T>.World = this;
+                SharedStoreCache<T>.Store = typed;
+                return typed;
+            }
 
             var created = new SharedComponentStore<T>();
             _sharedStoresByComponentId[id] = created;
+            SharedStoreCache<T>.World = this;
+            SharedStoreCache<T>.Store = created;
             return created;
+        }
+
+        private static class SparseStoreCache<T> where T : struct
+        {
+            [ThreadStatic] public static World? World;
+            [ThreadStatic] public static SparseSet<T>? Store;
+        }
+
+        private static class SharedStoreCache<T> where T : struct
+        {
+            [ThreadStatic] public static World? World;
+            [ThreadStatic] public static SharedComponentStore<T>? Store;
         }
 
         /// <summary>The entity's sparse-component bit set (<see cref="ComponentMask.Empty"/> if it

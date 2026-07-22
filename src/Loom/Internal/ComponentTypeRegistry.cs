@@ -133,8 +133,8 @@ namespace Loom.Internal
 
         private static class LastHitCache<T> where T : struct
         {
-            public static ComponentTypeRegistry? Registry;
-            public static ComponentTypeInfo? Info;
+            [ThreadStatic] public static ComponentTypeRegistry? Registry;
+            [ThreadStatic] public static ComponentTypeInfo? Info;
         }
 
         /// <summary>Looks up a <em>dense</em> component's info by its dense-space id. Never valid for a sparse id.</summary>

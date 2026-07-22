@@ -27,6 +27,11 @@ namespace Loom.Internal
             ((ComponentArray<T>)dst).Items[dstRow] = Items[srcRow];
         }
 
+        public void CopyRange(int srcRow, IComponentArray dst, int dstRow, int length)
+        {
+            System.Array.Copy(Items, srcRow, ((ComponentArray<T>)dst).Items, dstRow, length);
+        }
+
         public void Clear(int row)
         {
             if (NeedsClear)

@@ -73,9 +73,14 @@ namespace Loom.Internal
 
         public bool Remove(int entityId)
         {
-            if (!Has(entityId)) return false;
+            if ((uint)entityId >= (uint)_sparse.Length)
+                return false;
 
-            int dense = _sparse[entityId] - 1;
+            int slot = _sparse[entityId];
+            if (slot == Absent)
+                return false;
+
+            int dense = slot - 1;
             int lastDense = _count - 1;
             int lastEntity = _denseEntities[lastDense];
 

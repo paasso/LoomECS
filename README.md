@@ -121,11 +121,30 @@ world.Query().Each<MoveJob, Position, Velocity>(ref job);
 - [x] `[EcsComponent]` source generator accessors
 - [x] Unity package: runner, Entity Debugger, Flappy Bird / Speed Demo / HordeRush
 
+## Benchmarks
+
+[BenchmarkDotNet](benchmarks/Loom.Benchmarks) vs Arch, DefaultEcs, Friflo, LeoECS Lite (Ryzen 5 7500F, .NET 10, Mean).
+
+| | Loom | Friflo | Leo | DefaultEcs | Arch |
+|--|--:|--:|--:|--:|--:|
+| Dense iteration (100k) | 251 µs | **247 µs** | 255 µs | 287 µs | 792 µs |
+| Filtered query | 190 µs | 185 µs | 186 µs | **183 µs** | 510 µs |
+| Bulk create ×3 | 3.70 ms | **3.50 ms** | 3.84 ms | 11.6 ms | 7.14 ms |
+| Dense `Status` toggle (10k) | 212 µs | 290 µs | 91 µs* | 171 µs* | 591 µs |
+| Sparse `Status` churn (10k) | 159 µs | — | **92 µs** | 176 µs | — |
+
+\*Leo / DefaultEcs toggle without archetype moves. Sparse churn is Loom / Leo / DefaultEcs only.
+
+```bash
+dotnet run -c Release --project benchmarks/Loom.Benchmarks -- --filter *DenseIteration*
+```
+
 ## Samples & docs
 
 | | |
 |--|--|
 | Console demos (per feature) | [samples/README.md](samples/README.md) |
+| Benchmarks | [benchmarks/Loom.Benchmarks](benchmarks/Loom.Benchmarks/README.md) |
 | Unity UPM | [integrations/Unity/com.loom.ecs](integrations/Unity/com.loom.ecs/README.md) |
 
 ```bash

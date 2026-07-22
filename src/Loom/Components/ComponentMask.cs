@@ -268,6 +268,35 @@ namespace Loom.Components
         }
 #endif
 
+        /// <summary>Sets a bit in a stored mask without rewriting sibling words (mutates the
+        /// <paramref name="mask"/> location in place). Safe for sparse-presence slots; do not use on
+        /// masks that are dictionary keys or shared immutable values.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal static void SetBit(ref ComponentMask mask, int bit)
+        {
+            CheckBitStatic(bit);
+            System.Runtime.CompilerServices.Unsafe.Add(
+                ref System.Runtime.CompilerServices.Unsafe.As<ComponentMask, ulong>(ref mask),
+                bit >> 6) |= 1UL << (bit & 63);
+        }
+
+        /// <summary>Clears a bit in a stored mask without rewriting sibling words — see
+        /// <see cref="SetBit"/>.</summary>
+        [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+        internal static void ClearBit(ref ComponentMask mask, int bit)
+        {
+            CheckBitStatic(bit);
+            System.Runtime.CompilerServices.Unsafe.Add(
+                ref System.Runtime.CompilerServices.Unsafe.As<ComponentMask, ulong>(ref mask),
+                bit >> 6) &= ~(1UL << (bit & 63));
+        }
+
+        private static void CheckBitStatic(int bit)
+        {
+            if ((uint)bit >= Capacity)
+                throw new ArgumentOutOfRangeException(nameof(bit), $"Component id {bit} exceeds ComponentMask.Capacity ({Capacity}).");
+        }
+
         // --- Members below this point are identical across every tier. ---
 
         public override bool Equals(object obj) => obj is ComponentMask other && Equals(other);

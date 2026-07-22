@@ -11,6 +11,10 @@ namespace Loom.Internal
         /// <summary>Copies the value at <paramref name="srcRow"/> into <paramref name="dst"/> at <paramref name="dstRow"/>, leaving <paramref name="srcRow"/> untouched. <paramref name="dst"/> must be a <see cref="ComponentArray{T}"/> of the same T. Used when an entity gains/loses a component: the value needs to exist in both the old and new archetype's row until the old row is separately cleaned up.</summary>
         void CopyRowTo(int srcRow, IComponentArray dst, int dstRow);
 
+        /// <summary>Copies <paramref name="length"/> contiguous rows starting at
+        /// <paramref name="srcRow"/> into <paramref name="dst"/> at <paramref name="dstRow"/>.</summary>
+        void CopyRange(int srcRow, IComponentArray dst, int dstRow, int length);
+
         /// <summary>Resets a vacated row to <c>default</c> (releases any reference-typed fields).</summary>
         void Clear(int row);
 

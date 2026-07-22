@@ -155,6 +155,66 @@ public class BatchedCreateTests
     }
 
     [Fact]
+    public void CreateManyWithThreeComponents_SetsSameValuesOnEveryEntity()
+    {
+        var world = new World();
+        var entities = new Entity[4];
+
+        world.CreateMany(
+            entities,
+            new Position { X = 1 },
+            new Velocity { X = 2 },
+            new Health { Value = 3 });
+
+        Assert.Equal(4, world.EntityCount);
+        foreach (var e in entities)
+        {
+            Assert.Equal(1, world.Get<Position>(e).X);
+            Assert.Equal(2, world.Get<Velocity>(e).X);
+            Assert.Equal(3, world.Get<Health>(e).Value);
+        }
+    }
+
+    [Fact]
+    public void CreateManyWithThreeComponents_CountOverload_DoesNotNeedDestinationBuffer()
+    {
+        var world = new World();
+        world.CreateMany(5, new Position { X = 1 }, new Velocity { X = 2 }, new Health { Value = 3 });
+        Assert.Equal(5, world.EntityCount);
+    }
+
+    [Fact]
+    public void CreateManyWithEightComponents_SetsSameValuesOnEveryEntity()
+    {
+        var world = new World();
+        var entities = new Entity[3];
+
+        world.CreateMany(
+            entities,
+            new Position { X = 1 },
+            new Velocity { X = 2 },
+            new Health { Value = 3 },
+            new Comp3 { Value = 4 },
+            new Comp4 { Value = 5 },
+            new Comp5 { Value = 6 },
+            new Comp6 { Value = 7 },
+            new Comp7 { Value = 8 });
+
+        Assert.Equal(3, world.EntityCount);
+        foreach (var e in entities)
+        {
+            Assert.Equal(1, world.Get<Position>(e).X);
+            Assert.Equal(2, world.Get<Velocity>(e).X);
+            Assert.Equal(3, world.Get<Health>(e).Value);
+            Assert.Equal(4, world.Get<Comp3>(e).Value);
+            Assert.Equal(5, world.Get<Comp4>(e).Value);
+            Assert.Equal(6, world.Get<Comp5>(e).Value);
+            Assert.Equal(7, world.Get<Comp6>(e).Value);
+            Assert.Equal(8, world.Get<Comp7>(e).Value);
+        }
+    }
+
+    [Fact]
     public void DestroyMany_RemovesEveryEntity()
     {
         var world = new World();

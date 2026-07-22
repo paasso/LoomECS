@@ -133,4 +133,44 @@ public class DenseComponentArchetypeTests
         // recreated on every add/remove cycle.
         Assert.Equal(afterFirstAdd, world.ArchetypeCount);
     }
+
+    [Fact]
+    public void AddMany_RemoveMany_WholeArchetype_PreservesOtherComponents()
+    {
+        var world = new World();
+        var entities = new Entity[8];
+        world.CreateMany(entities, new Position { X = 3 });
+
+        world.AddMany(entities, new Velocity { X = 9 });
+        foreach (var e in entities)
+        {
+            Assert.Equal(3, world.Get<Position>(e).X);
+            Assert.Equal(9, world.Get<Velocity>(e).X);
+        }
+
+        world.RemoveMany<Velocity>(entities);
+        foreach (var e in entities)
+        {
+            Assert.Equal(3, world.Get<Position>(e).X);
+            Assert.False(world.Has<Velocity>(e));
+        }
+
+        Assert.Equal(8, world.EntityCount);
+    }
+
+    [Fact]
+    public void AddMany_PartialSubset_PreservesUntouchedEntities()
+    {
+        var world = new World();
+        var all = new Entity[5];
+        world.CreateMany(all, new Position { X = 1 });
+        var subset = all.AsSpan(0, 2).ToArray();
+
+        world.AddMany(subset, new Velocity { X = 7 });
+
+        Assert.True(world.Has<Velocity>(all[0]));
+        Assert.True(world.Has<Velocity>(all[1]));
+        Assert.False(world.Has<Velocity>(all[2]));
+        Assert.Equal(1, world.Get<Position>(all[4]).X);
+    }
 }
