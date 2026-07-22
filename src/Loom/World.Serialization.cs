@@ -5,10 +5,10 @@ namespace Loom
 {
     public sealed partial class World
     {
-        /// <summary>True when this world has never created or destroyed an entity — required by
-        /// <see cref="WorldSerializer.LoadFromJson"/> so restored ids/versions land in a clean slot
-        /// table.</summary>
-        internal bool IsPristine => _nextId == 1 && _liveCount == 0 && _freeIds.Count == 0;
+        /// <summary>True when this world has never created or destroyed an entity, or was returned
+        /// to that state via <see cref="Reset"/>. Required by <see cref="WorldSerializer"/> load APIs
+        /// so restored ids/versions land in a clean slot table.</summary>
+        public bool IsPristine => _nextId == 1 && _liveCount == 0 && _freeIds.Count == 0;
 
         internal int NextEntityIdExclusive => _nextId;
 

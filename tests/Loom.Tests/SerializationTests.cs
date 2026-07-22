@@ -470,4 +470,23 @@ public class SerializationTests
         Assert.Throws<InvalidOperationException>(() =>
             serializer.LoadFromMemoryPack(new World(), new byte[] { 1, 2, 3, 4, 0, 0, 0, 1 }));
     }
+
+    [Fact]
+    public void ReplaceFromMemoryPack_ResetsLiveWorldThenLoads()
+    {
+        var serializer = CreateSerializer();
+        var source = new World();
+        var e = source.Create(new Position { X = 11, Y = 22 });
+        byte[] bytes = serializer.SaveToMemoryPack(source);
+
+        var live = new World();
+        live.Create(new Position { X = -1 });
+        Assert.False(live.IsPristine);
+
+        serializer.ReplaceFromMemoryPack(live, bytes);
+
+        Assert.True(live.IsAlive(e));
+        Assert.Equal(11, live.Get<Position>(e).X);
+        Assert.Equal(1, live.EntityCount);
+    }
 }

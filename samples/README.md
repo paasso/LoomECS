@@ -15,6 +15,7 @@ Non-Unity demos under `samples/`. Each project focuses on one library feature.
 | [Loom.Systems](Loom.Systems/) | Owned groups, ordering, lifecycle, nested groups, `IParallelSystem` |
 | [Loom.ScheduleRates](Loom.ScheduleRates/) | Init / simulation / presentation groups at different rates (`Run` + `EndFrame`) |
 | [Loom.SerializationDemo](Loom.SerializationDemo/) | `WorldSerializer` JSON snapshots |
+| [Loom.NetDemo](Loom.NetDemo/) | Authoritative tick → MemoryPack snapshot/delta over loopback |
 | [Loom.Accessors](Loom.Accessors/) | `[EcsComponent]` source-generator accessors |
 
 ```bash
@@ -28,6 +29,7 @@ dotnet run --project samples/Loom.Relations
 dotnet run --project samples/Loom.Systems
 dotnet run --project samples/Loom.ScheduleRates
 dotnet run --project samples/Loom.SerializationDemo
+dotnet run --project samples/Loom.NetDemo
 dotnet run --project samples/Loom.Accessors
 dotnet run -c Release --project samples/Loom.SpeedDemo -- --headless --entities 100000 --seconds 3 --parallel
 ```

@@ -37,5 +37,26 @@ public class ClearEntitiesTests
         Assert.False(world.HasSingleton<FrameMarker>());
     }
 
+    [Fact]
+    public void Reset_ReturnsWorldToPristine_AndClearsSingletonsByDefault()
+    {
+        var world = new World();
+        world.SetSingleton(new FrameMarker { Value = 3 });
+        var a = world.Create(new Pos { X = 1 });
+        world.Create();
+        world.Destroy(a);
+
+        Assert.False(world.IsPristine);
+        world.Reset();
+
+        Assert.True(world.IsPristine);
+        Assert.Equal(0, world.EntityCount);
+        Assert.False(world.HasSingleton<FrameMarker>());
+
+        var b = world.Create(new Pos { X = 9 });
+        Assert.Equal(1, b.Id);
+        Assert.Equal(0, b.Version);
+    }
+
     struct FrameMarker { public int Value; }
 }

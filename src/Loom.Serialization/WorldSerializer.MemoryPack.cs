@@ -56,7 +56,24 @@ namespace Loom
             if (bytes == null)
                 throw new ArgumentNullException(nameof(bytes));
             EnsurePristine(world, nameof(LoadFromMemoryPack));
+            LoadFromMemoryPackAfterPristine(world, bytes);
+        }
 
+        /// <summary>Resets <paramref name="world"/> to pristine (clearing entities and singletons)
+        /// then loads a MemoryPack snapshot. Intended for live client apply / net resync.</summary>
+        public void ReplaceFromMemoryPack(World world, byte[] bytes)
+        {
+            if (world == null)
+                throw new ArgumentNullException(nameof(world));
+            if (bytes == null)
+                throw new ArgumentNullException(nameof(bytes));
+
+            world.Reset(clearSingletons: true);
+            LoadFromMemoryPackAfterPristine(world, bytes);
+        }
+
+        private void LoadFromMemoryPackAfterPristine(World world, byte[] bytes)
+        {
             if (HasMagic(bytes, MemoryPackBrotliMagic))
             {
                 using var decompressor = new BrotliDecompressor();

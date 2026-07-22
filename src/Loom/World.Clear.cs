@@ -13,6 +13,23 @@ namespace Loom
         /// <param name="clearSingletons">When true, also removes all singleton values.</param>
         public void ClearEntities(bool clearSingletons = false)
         {
+            ClearEntityStorage(recycleIds: true, clearSingletons);
+        }
+
+        /// <summary>
+        /// Destroys every entity and returns the world to a pristine entity-id state
+        /// (<see cref="IsPristine"/>) suitable for <see cref="WorldSerializer"/> load and net
+        /// snapshot apply. Keeps archetype pages and component type registrations.
+        /// Does not touch systems or events — those live on <see cref="Runtime"/>.
+        /// </summary>
+        /// <param name="clearSingletons">When true, also removes all singleton values.</param>
+        public void Reset(bool clearSingletons = true)
+        {
+            ClearEntityStorage(recycleIds: false, clearSingletons);
+        }
+
+        private void ClearEntityStorage(bool recycleIds, bool clearSingletons)
+        {
             ClearComponentChanges();
 
             for (int i = 0; i < _archetypes.Count; i++)
@@ -30,18 +47,30 @@ namespace Loom
             for (int id = 1; id < _nextId; id++)
             {
                 ref var rec = ref _records[id];
-                if (rec.IsAlive || rec.Version != 0 || rec.Archetype != null)
+                if (recycleIds)
+                {
+                    if (rec.IsAlive || rec.Version != 0 || rec.Archetype != null)
+                    {
+                        rec.IsAlive = false;
+                        rec.Archetype = null;
+                        rec.Row = 0;
+                        rec.Version++;
+                    }
+
+                    _freeIds.Push(id);
+                }
+                else
                 {
                     rec.IsAlive = false;
                     rec.Archetype = null;
                     rec.Row = 0;
-                    rec.Version++;
+                    rec.Version = 0;
                 }
-
-                _freeIds.Push(id);
             }
 
             _liveCount = 0;
+            if (!recycleIds)
+                _nextId = 1;
 
             if (clearSingletons)
             {

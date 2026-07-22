@@ -299,7 +299,24 @@ namespace Loom
             if (json == null)
                 throw new ArgumentNullException(nameof(json));
             EnsurePristine(world, nameof(LoadFromJson));
+            LoadFromJsonAfterPristine(world, json);
+        }
 
+        /// <summary>Resets <paramref name="world"/> to pristine (clearing entities and singletons)
+        /// then loads a JSON snapshot. Intended for live client apply / net resync.</summary>
+        public void ReplaceFromJson(World world, string json)
+        {
+            if (world == null)
+                throw new ArgumentNullException(nameof(world));
+            if (json == null)
+                throw new ArgumentNullException(nameof(json));
+
+            world.Reset(clearSingletons: true);
+            LoadFromJsonAfterPristine(world, json);
+        }
+
+        private void LoadFromJsonAfterPristine(World world, string json)
+        {
             string upgraded = UpgradeFormat(json);
             var snapshot = JsonSerializer.Deserialize<WorldSnapshot>(upgraded, JsonOptions)
                            ?? throw new InvalidOperationException("Snapshot JSON deserialized to null.");
