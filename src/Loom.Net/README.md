@@ -159,4 +159,6 @@ dotnet add package LoomECS.Serialization
 dotnet add package LoomECS.Net
 ```
 
-Sample: `samples/Loom.NetDemo` (`--session` for `AuthoritativeServer` / `NetClient`, `--demo` for the manual loop).
+Samples:
+- `samples/Loom.NetDemo` (`--session` for `AuthoritativeServer` / `NetClient`, `--demo` for the manual loop)
+- `samples/Loom.ArenaDots` — 2–4 player arena dots over loopback (console convergence log or `--visual` Raylib)
