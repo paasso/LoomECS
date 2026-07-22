@@ -74,4 +74,40 @@ public class SnapshotSyncTests
         Assert.Equal(7, tick);
         Assert.Equal(42, client.Get<Position>(e).X);
     }
+
+    [Fact]
+    public void AdaptiveCompression_SmallSnapshotStaysUncompressed()
+    {
+        var server = new World();
+        server.Create(new Position { X = 1 });
+
+        var sync = new SnapshotSync(CreateSerializer(), compress: true);
+        byte[] snapshot = sync.Capture(server);
+
+        Assert.Equal((byte)'P', snapshot[3]); // LCMP, below threshold
+        Assert.True(snapshot.Length < SnapshotSync.DefaultCompressThreshold);
+
+        var client = new World();
+        sync.Apply(client, snapshot);
+        Assert.True(client.TryGetAliveEntity(1, out var e));
+        Assert.Equal(1, client.Get<Position>(e).X);
+    }
+
+    [Fact]
+    public void AdaptiveCompression_LargeSnapshotUsesBrotli()
+    {
+        var server = new World();
+        for (int i = 0; i < 64; i++)
+            server.Create(new Position { X = i }, new Velocity { X = 1, Y = 2 });
+
+        var raw = new SnapshotSync(CreateSerializer(), compress: false);
+        var brotli = new SnapshotSync(CreateSerializer(), compress: true);
+        byte[] uncompressed = raw.Capture(server);
+        byte[] compressed = brotli.Capture(server);
+
+        Assert.True(uncompressed.Length >= SnapshotSync.DefaultCompressThreshold);
+        Assert.Equal((byte)'P', uncompressed[3]);
+        Assert.Equal((byte)'B', compressed[3]);
+        Assert.True(compressed.Length < uncompressed.Length);
+    }
 }

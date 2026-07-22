@@ -14,14 +14,15 @@ namespace Loom.Net
 {
     /// <summary>
     /// Thin dirty-component delta sync built on <see cref="World.TrackChanges{T}"/> /
-    /// <see cref="World.Set{T}"/> / <see cref="World.MarkChanged{T}"/>.
-    /// Captures Added / Changed / Removed for registered component types as MemoryPack payloads.
+    /// <see cref="World.TrackEntityLifecycle"/> / <see cref="World.Set{T}"/> /
+    /// <see cref="World.MarkChanged{T}"/>.
+    /// Captures entity spawn/despawn plus Added / Changed / Removed for registered component types
+    /// as MemoryPack payloads.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Entity spawn/despawn is out of scope for this MVP — use <see cref="SnapshotSync"/> for
-    /// joins, periodic corrections, and structural changes. Delta apply requires the target entity
-    /// to already be alive with a matching id/version (from a prior snapshot).
+    /// First join / full resync still needs <see cref="SnapshotSync"/>. Subsequent structural
+    /// creates and destroys can go over the delta path (format version 3).
     /// </para>
     /// <para>
     /// Call <see cref="Capture"/> / <see cref="TryCapture"/> before
@@ -30,26 +31,34 @@ namespace Loom.Net
     /// are recorded.
     /// </para>
     /// <para>
-    /// Wire format version 2 identifies component types by
+    /// Wire format version 3 identifies component types by
     /// <see cref="ComponentTypeTraits{T}.DeterministicHash"/> (<see cref="int"/>), not CLR
-    /// FullName strings. SnapshotSync / WorldSerializer savegames formats are unchanged (still
-    /// name-based MemoryPack/JSON).
+    /// FullName strings, and prefixes spawn/despawn ops before per-type dirty lists.
+    /// SnapshotSync / WorldSerializer savegames formats are unchanged (still name-based
+    /// MemoryPack/JSON). Apply still accepts v2 payloads (component ops only, no structural).
     /// </para>
     /// <para>
-    /// When there are zero dirty ops, <see cref="TryCapture"/> returns <c>false</c> and
-    /// <see cref="Capture"/> / <see cref="CaptureFramed"/> return <see cref="Array.Empty{T}"/> —
-    /// callers should skip the send (idle ≈ 0 B on the wire).
+    /// When there are zero structural and zero dirty ops, <see cref="TryCapture"/> returns
+    /// <c>false</c> and <see cref="Capture"/> / <see cref="CaptureFramed"/> return
+    /// <see cref="Array.Empty{T}"/> — callers should skip the send (idle ≈ 0 B on the wire).
     /// </para>
     /// <para>
-    /// When constructed with <c>compress: true</c>, Capture wraps the LDLT body with MemoryPack's
-    /// <see cref="BrotliCompressor"/> (<see cref="CompressionLevel.Fastest"/>) under magic
-    /// <c>LDLB</c> (same approach as SnapshotSync / LCMB). Apply accepts both LDLT and LDLB.
+    /// When constructed with <c>compress: true</c>, Capture <em>allows</em> Brotli wrapping of the
+    /// LDLT body (MemoryPack <see cref="BrotliCompressor"/>, <see cref="CompressionLevel.Fastest"/>)
+    /// under magic <c>LDLB</c> only when the uncompressed payload length is ≥
+    /// <see cref="DefaultCompressThreshold"/> (or the configured threshold). Smaller payloads stay
+    /// raw LDLT. Apply accepts both LDLT and LDLB.
     /// </para>
     /// </remarks>
     public sealed class DeltaSync
     {
-        /// <summary>LDLT format version: v2 uses int DeterministicHash type ids (v1 used FullName strings).</summary>
-        private const int FormatVersion = 2;
+        /// <summary>Default minimum uncompressed LDLT size before Brotli wrapping is applied when
+        /// <c>compress: true</c>.</summary>
+        public const int DefaultCompressThreshold = 256;
+
+        /// <summary>LDLT format version: v3 adds spawn/despawn; type ids remain DeterministicHash.</summary>
+        private const int FormatVersion = 3;
+        private const int MinReadableFormatVersion = 2;
         private static readonly byte[] Magic = { (byte)'L', (byte)'D', (byte)'L', (byte)'T' };
         /// <summary>ASCII magic for Brotli-compressed deltas: "LDLB".
         /// Payload after the magic is MemoryPack <c>BrotliCompressor</c> output of a full LDLT delta.</summary>
@@ -57,15 +66,32 @@ namespace Loom.Net
 
         private readonly List<IDeltaHandler> _handlers = new List<IDeltaHandler>();
         private readonly Dictionary<int, IDeltaHandler> _byHash = new Dictionary<int, IDeltaHandler>();
+        private readonly List<Entity> _createdScratch = new List<Entity>();
+        private readonly List<Entity> _destroyedScratch = new List<Entity>();
+        private readonly HashSet<int> _spawnedIds = new HashSet<int>();
+        private readonly HashSet<int> _destroyedIds = new HashSet<int>();
+        private readonly List<IDeltaHandler> _spawnComponentScratch = new List<IDeltaHandler>();
         private readonly bool _compress;
+        private readonly int _compressThreshold;
 
-        public DeltaSync(bool compress = false)
+        public DeltaSync(bool compress = false, int compressThreshold = DefaultCompressThreshold)
         {
+            if (compressThreshold < 0)
+                throw new ArgumentOutOfRangeException(nameof(compressThreshold));
+
             _compress = compress;
+            _compressThreshold = compressThreshold;
         }
 
+        /// <summary>When true, Capture may wrap large enough payloads as LDLB.</summary>
+        public bool Compress => _compress;
+
+        /// <summary>Minimum uncompressed LDLT length required before Brotli wrapping.</summary>
+        public int CompressThreshold => _compressThreshold;
+
         /// <summary>Registers <typeparamref name="T"/> for dirty capture/apply. Call
-        /// <see cref="World.TrackChanges{T}"/> on the server world during setup.
+        /// <see cref="World.TrackChanges{T}"/> on the server world during setup
+        /// (or <see cref="EnableTracking"/>).
         /// Type identity over the wire is <see cref="ComponentTypeTraits{T}.DeterministicHash"/>.</summary>
         /// <exception cref="ComponentHashCollisionException">Thrown when another registered type
         /// already owns the same DeterministicHash (also raised process-wide by traits init).</exception>
@@ -89,17 +115,19 @@ namespace Loom.Net
             return this;
         }
 
-        /// <summary>Ensures the server world tracks every registered type.</summary>
+        /// <summary>Ensures the server world tracks entity lifecycle and every registered type.</summary>
         public void EnableTracking(World world)
         {
             if (world == null)
                 throw new ArgumentNullException(nameof(world));
+
+            world.TrackEntityLifecycle();
             for (int i = 0; i < _handlers.Count; i++)
                 _handlers[i].EnableTracking(world);
         }
 
         /// <summary>
-        /// Attempts to serialize dirty component ops since the last change clear.
+        /// Attempts to serialize structural + dirty component ops since the last change clear.
         /// Returns <c>false</c> (and <see cref="Array.Empty{T}"/>) when there are zero ops —
         /// skip broadcasting in that case.
         /// </summary>
@@ -116,7 +144,7 @@ namespace Loom.Net
                 return false;
             }
 
-            if (!_compress)
+            if (!_compress || raw.Length < _compressThreshold)
             {
                 delta = raw;
                 return true;
@@ -133,8 +161,8 @@ namespace Loom.Net
             return true;
         }
 
-        /// <summary>Serializes dirty component ops since the last change clear.
-        /// Returns LDLT (raw) or LDLB (Brotli) depending on construction.
+        /// <summary>Serializes structural + dirty component ops since the last change clear.
+        /// Returns LDLT (raw) or LDLB (Brotli when allowed and large enough).
         /// Returns <see cref="Array.Empty{T}"/> when there are zero ops (prefer
         /// <see cref="TryCapture"/> and skip the send).</summary>
         public byte[] Capture(World world)
@@ -175,11 +203,19 @@ namespace Loom.Net
             }
 
             int version = reader.ReadInt32();
-            if (version != FormatVersion)
+            if (version < MinReadableFormatVersion || version > FormatVersion)
             {
                 throw new InvalidOperationException(
-                    $"Unsupported delta formatVersion {version}; this build understands {FormatVersion} " +
-                    "(v2 uses DeterministicHash type ids).");
+                    $"Unsupported delta formatVersion {version}; this build understands " +
+                    $"{MinReadableFormatVersion}..{FormatVersion} (DeterministicHash type ids; " +
+                    "v3 adds spawn/despawn).");
+            }
+
+            if (version >= 3)
+            {
+                // Despawn before spawn so same-tick id recycle can replace an occupied slot.
+                ApplyDespawns(reader, world);
+                ApplySpawns(reader, world);
             }
 
             int typeCount = reader.ReadInt32();
@@ -227,15 +263,24 @@ namespace Loom.Net
 
         private bool TryCaptureRaw(World world, out byte[] raw)
         {
-            // First pass: which handlers have any dirty ops?
+            world.CopyCreatedEntitiesTo(_createdScratch);
+            world.CopyDestroyedEntitiesTo(_destroyedScratch);
+
+            _spawnedIds.Clear();
+            _destroyedIds.Clear();
+            for (int i = 0; i < _createdScratch.Count; i++)
+                _spawnedIds.Add(_createdScratch[i].Id);
+            for (int i = 0; i < _destroyedScratch.Count; i++)
+                _destroyedIds.Add(_destroyedScratch[i].Id);
+
             int activeCount = 0;
             for (int i = 0; i < _handlers.Count; i++)
             {
-                if (_handlers[i].HasOps(world))
+                if (_handlers[i].HasOps(world, _spawnedIds, _destroyedIds))
                     activeCount++;
             }
 
-            if (activeCount == 0)
+            if (_createdScratch.Count == 0 && _destroyedScratch.Count == 0 && activeCount == 0)
             {
                 raw = Array.Empty<byte>();
                 return false;
@@ -246,17 +291,114 @@ namespace Loom.Net
             {
                 writer.Write(Magic);
                 writer.Write(FormatVersion);
+
+                WriteDespawns(writer);
+                WriteSpawns(writer, world);
+
                 writer.Write(activeCount);
                 for (int i = 0; i < _handlers.Count; i++)
                 {
-                    if (!_handlers[i].HasOps(world))
+                    if (!_handlers[i].HasOps(world, _spawnedIds, _destroyedIds))
                         continue;
-                    _handlers[i].Write(writer, world);
+                    _handlers[i].Write(writer, world, _spawnedIds, _destroyedIds);
                 }
             }
 
             raw = ms.ToArray();
             return true;
+        }
+
+        private void WriteSpawns(BinaryWriter writer, World world)
+        {
+            writer.Write(_createdScratch.Count);
+            for (int i = 0; i < _createdScratch.Count; i++)
+            {
+                var entity = _createdScratch[i];
+                writer.Write(entity.Id);
+                writer.Write(entity.Version);
+
+                _spawnComponentScratch.Clear();
+                for (int h = 0; h < _handlers.Count; h++)
+                {
+                    if (_handlers[h].EntityHasComponent(world, entity))
+                        _spawnComponentScratch.Add(_handlers[h]);
+                }
+
+                writer.Write(_spawnComponentScratch.Count);
+                for (int h = 0; h < _spawnComponentScratch.Count; h++)
+                    _spawnComponentScratch[h].WriteSpawnComponent(writer, world, entity);
+            }
+        }
+
+        private void WriteDespawns(BinaryWriter writer)
+        {
+            writer.Write(_destroyedScratch.Count);
+            for (int i = 0; i < _destroyedScratch.Count; i++)
+            {
+                var entity = _destroyedScratch[i];
+                writer.Write(entity.Id);
+                writer.Write(entity.Version);
+            }
+        }
+
+        private void ApplySpawns(BinaryReader reader, World world)
+        {
+            int spawnCount = reader.ReadInt32();
+            if (spawnCount < 0)
+                throw new InvalidOperationException("Delta has a negative spawn count.");
+
+            for (int i = 0; i < spawnCount; i++)
+            {
+                int id = reader.ReadInt32();
+                int version = reader.ReadInt32();
+                int componentCount = reader.ReadInt32();
+                if (componentCount < 0)
+                    throw new InvalidOperationException("Delta has a negative spawn component count.");
+
+                Entity entity;
+                if (world.TryGetAliveEntity(id, out var existing))
+                {
+                    if (existing.Version != version)
+                    {
+                        throw new InvalidOperationException(
+                            $"Cannot spawn entity id={id} version={version}: slot is alive at version={existing.Version}.");
+                    }
+
+                    entity = existing;
+                }
+                else
+                {
+                    entity = world.RestoreEntity(id, version);
+                }
+
+                for (int c = 0; c < componentCount; c++)
+                {
+                    int typeHash = reader.ReadInt32();
+                    if (!_byHash.TryGetValue(typeHash, out var handler))
+                    {
+                        throw new InvalidOperationException(
+                            $"Unknown spawn component type hash 0x{typeHash:X8}. Register<>() it on DeltaSync before Apply.");
+                    }
+
+                    handler.ReadSpawnComponent(reader, world, entity);
+                }
+            }
+        }
+
+        private static void ApplyDespawns(BinaryReader reader, World world)
+        {
+            int despawnCount = reader.ReadInt32();
+            if (despawnCount < 0)
+                throw new InvalidOperationException("Delta has a negative despawn count.");
+
+            for (int i = 0; i < despawnCount; i++)
+            {
+                int id = reader.ReadInt32();
+                int version = reader.ReadInt32();
+
+                if (world.TryGetAliveEntity(id, out var entity) && entity.Version == version)
+                    world.Destroy(entity);
+            }
         }
 
         private static bool HasMagic(byte[] bytes, byte[] magic) =>
@@ -268,9 +410,12 @@ namespace Loom.Net
         {
             Type ClrType { get; }
             void EnableTracking(World world);
-            bool HasOps(World world);
-            void Write(BinaryWriter writer, World world);
+            bool HasOps(World world, HashSet<int> spawnedIds, HashSet<int> destroyedIds);
+            void Write(BinaryWriter writer, World world, HashSet<int> spawnedIds, HashSet<int> destroyedIds);
             void Read(BinaryReader reader, World world);
+            bool EntityHasComponent(World world, Entity entity);
+            void WriteSpawnComponent(BinaryWriter writer, World world, Entity entity);
+            void ReadSpawnComponent(BinaryReader reader, World world, Entity entity);
         }
 
         private sealed class DeltaHandler<T> : IDeltaHandler where T : struct
@@ -289,29 +434,37 @@ namespace Loom.Net
 
             public void EnableTracking(World world) => world.TrackChanges<T>();
 
-            public bool HasOps(World world)
+            public bool EntityHasComponent(World world, Entity entity) => world.Has<T>(entity);
+
+            public bool HasOps(World world, HashSet<int> spawnedIds, HashSet<int> destroyedIds)
             {
                 world.CopyAddedTo<T>(_scratch);
+                FilterOut(_scratch, spawnedIds);
                 if (_scratch.Count > 0)
                     return true;
                 world.CopyChangedTo<T>(_scratch);
+                FilterOut(_scratch, spawnedIds);
                 if (_scratch.Count > 0)
                     return true;
                 world.CopyRemovedTo<T>(_scratch);
+                FilterOut(_scratch, destroyedIds);
                 return _scratch.Count > 0;
             }
 
-            public void Write(BinaryWriter writer, World world)
+            public void Write(BinaryWriter writer, World world, HashSet<int> spawnedIds, HashSet<int> destroyedIds)
             {
                 writer.Write(_hash);
 
                 world.CopyAddedTo<T>(_scratch);
+                FilterOut(_scratch, spawnedIds);
                 WriteOps(writer, world, _scratch, includePayload: true);
 
                 world.CopyChangedTo<T>(_scratch);
+                FilterOut(_scratch, spawnedIds);
                 WriteOps(writer, world, _scratch, includePayload: true);
 
                 world.CopyRemovedTo<T>(_scratch);
+                FilterOut(_scratch, destroyedIds);
                 WriteOps(writer, world, _scratch, includePayload: false);
             }
 
@@ -320,6 +473,47 @@ namespace Loom.Net
                 ApplyOps(reader, world, addOrSet: true);
                 ApplyOps(reader, world, addOrSet: true);
                 ApplyOps(reader, world, addOrSet: false);
+            }
+
+            public void WriteSpawnComponent(BinaryWriter writer, World world, Entity entity)
+            {
+                writer.Write(_hash);
+                if (_isEmpty)
+                {
+                    writer.Write(0);
+                    return;
+                }
+
+                byte[] payload = MemoryPackSerializer.Serialize(world.Get<T>(entity));
+                writer.Write(payload.Length);
+                writer.Write(payload);
+            }
+
+            public void ReadSpawnComponent(BinaryReader reader, World world, Entity entity)
+            {
+                int length = reader.ReadInt32();
+                if (length < 0)
+                    throw new InvalidOperationException("Delta has a negative spawn payload length.");
+
+                byte[] payload = length == 0 ? Array.Empty<byte>() : reader.ReadBytes(length);
+                if (payload.Length != length)
+                    throw new InvalidOperationException("Delta ended inside a spawn component payload.");
+
+                if (_isEmpty)
+                {
+                    if (!world.Has<T>(entity))
+                        world.Add(entity, default(T));
+                    return;
+                }
+
+                if (length == 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Component hash 0x{_hash:X8} requires a MemoryPack payload in the spawn.");
+                }
+
+                T value = MemoryPackSerializer.Deserialize<T>(payload);
+                world.AddOrSet(entity, value);
             }
 
             private void WriteOps(BinaryWriter writer, World world, List<Entity> entities, bool includePayload)
@@ -371,7 +565,7 @@ namespace Loom.Net
                             throw new InvalidOperationException(
                                 $"Cannot apply delta for entity id={id} version={version}: " +
                                 "entity is not alive on the peer (or version mismatch). " +
-                                "Send a full SnapshotSync first after structural creates.");
+                                "Send a full SnapshotSync first after join, or ensure spawn ops precede component dirty ops.");
                         }
 
                         if (_isEmpty)
@@ -397,6 +591,23 @@ namespace Loom.Net
                         world.Remove<T>(removed);
                     }
                 }
+            }
+
+            private static void FilterOut(List<Entity> entities, HashSet<int> ids)
+            {
+                if (ids.Count == 0 || entities.Count == 0)
+                    return;
+
+                int write = 0;
+                for (int i = 0; i < entities.Count; i++)
+                {
+                    if (ids.Contains(entities[i].Id))
+                        continue;
+                    entities[write++] = entities[i];
+                }
+
+                if (write < entities.Count)
+                    entities.RemoveRange(write, entities.Count - write);
             }
         }
     }

@@ -32,6 +32,7 @@ namespace Loom
         private static readonly byte[] MemoryPackMagic = { (byte)'L', (byte)'C', (byte)'M', (byte)'P' };
 
         /// <summary>ASCII magic for Brotli-compressed <see cref="SaveToMemoryPack"/> payloads: "LCMB".
+        /// Used when compression is allowed and the uncompressed LCMP body meets the size threshold.
         /// Payload after the magic is MemoryPack <c>BrotliCompressor</c> output of a full LCMP snapshot.</summary>
         private static readonly byte[] MemoryPackBrotliMagic = { (byte)'L', (byte)'C', (byte)'M', (byte)'B' };
 

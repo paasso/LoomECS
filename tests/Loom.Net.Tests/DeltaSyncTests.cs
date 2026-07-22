@@ -22,6 +22,7 @@ public class DeltaSyncTests
 
         var deltas = new DeltaSync().Register<Position>().Register<Velocity>();
         deltas.EnableTracking(server);
+        server.ClearComponentChanges();
 
         server.Set(a, new Position { X = 9, Y = 8 });
         server.Set(a, new Velocity { X = 1, Y = 1 });
@@ -29,8 +30,8 @@ public class DeltaSyncTests
         Assert.True(deltas.TryCapture(server, out byte[] delta));
         Assert.True(delta.Length > 0);
         Assert.Equal((byte)'T', delta[3]); // LDLT
-        // FormatVersion 2 at offset 4
-        Assert.Equal(2, BitConverter.ToInt32(delta, 4));
+        // FormatVersion 3 at offset 4
+        Assert.Equal(3, BitConverter.ToInt32(delta, 4));
         deltas.Apply(client, delta);
 
         Assert.Equal(9, client.Get<Position>(a).X);
@@ -52,8 +53,9 @@ public class DeltaSyncTests
         var snapshots = new SnapshotSync(serializer);
         snapshots.Apply(client, snapshots.Capture(server));
 
-        var deltas = new DeltaSync().Register<Health>();
+        var deltas = new DeltaSync().Register<Health>().Register<Position>();
         deltas.EnableTracking(server);
+        server.ClearComponentChanges();
 
         server.Add(a, new Health { Value = 50 });
         deltas.Apply(client, deltas.Capture(server));
@@ -63,6 +65,119 @@ public class DeltaSyncTests
         Assert.True(server.Remove<Health>(a));
         deltas.Apply(client, deltas.Capture(server));
         Assert.False(client.Has<Health>(a));
+    }
+
+    [Fact]
+    public void CaptureApply_SpawnsEntitiesOnClient()
+    {
+        var serializer = new WorldSerializer()
+            .Register<Position>()
+            .Register<Velocity>();
+
+        var server = new World();
+        var client = new World();
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server)); // empty join
+
+        var deltas = new DeltaSync().Register<Position>().Register<Velocity>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+
+        var spawned = server.Create(new Position { X = 4, Y = 5 }, new Velocity { X = 1, Y = 2 });
+        Assert.True(deltas.TryCapture(server, out byte[] delta));
+        deltas.Apply(client, delta);
+
+        Assert.True(client.IsAlive(spawned));
+        Assert.Equal(4, client.Get<Position>(spawned).X);
+        Assert.Equal(2, client.Get<Velocity>(spawned).Y);
+        Assert.Equal(1, client.EntityCount);
+    }
+
+    [Fact]
+    public void CaptureApply_DespawnsEntitiesOnClient()
+    {
+        var serializer = new WorldSerializer()
+            .Register<Position>();
+
+        var server = new World();
+        var client = new World();
+        var a = server.Create(new Position { X = 1 });
+        var b = server.Create(new Position { X = 2 });
+
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server));
+
+        var deltas = new DeltaSync().Register<Position>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+
+        server.Destroy(b);
+        Assert.True(deltas.TryCapture(server, out byte[] delta));
+        deltas.Apply(client, delta);
+
+        Assert.True(client.IsAlive(a));
+        Assert.False(client.IsAlive(b));
+        Assert.Equal(1, client.EntityCount);
+    }
+
+    [Fact]
+    public void CaptureApply_MixesSpawnDespawnAndDirtyUpdates()
+    {
+        var serializer = new WorldSerializer()
+            .Register<Position>()
+            .Register<Velocity>();
+
+        var server = new World();
+        var client = new World();
+        var existing = server.Create(new Position { X = 1, Y = 1 }, new Velocity { X = 0, Y = 0 });
+        var doomed = server.Create(new Position { X = 9 });
+
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server));
+
+        var deltas = new DeltaSync().Register<Position>().Register<Velocity>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+
+        server.Set(existing, new Position { X = 10, Y = 20 });
+        server.Destroy(doomed);
+        var newborn = server.Create(new Position { X = 7, Y = 8 }, new Velocity { X = 3, Y = 4 });
+
+        deltas.Apply(client, deltas.Capture(server));
+
+        Assert.Equal(10, client.Get<Position>(existing).X);
+        Assert.Equal(20, client.Get<Position>(existing).Y);
+        Assert.False(client.IsAlive(doomed));
+        Assert.True(client.IsAlive(newborn));
+        Assert.Equal(7, client.Get<Position>(newborn).X);
+        Assert.Equal(3, client.Get<Velocity>(newborn).X);
+        Assert.Equal(2, client.EntityCount);
+    }
+
+    [Fact]
+    public void CaptureApply_RecyclesEntityIdViaDespawnThenSpawn()
+    {
+        var serializer = new WorldSerializer().Register<Position>();
+        var server = new World();
+        var client = new World();
+        var first = server.Create(new Position { X = 1 });
+
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server));
+
+        var deltas = new DeltaSync().Register<Position>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+
+        server.Destroy(first);
+        var recycled = server.Create(new Position { X = 42 });
+        Assert.Equal(first.Id, recycled.Id);
+        Assert.NotEqual(first.Version, recycled.Version);
+
+        deltas.Apply(client, deltas.Capture(server));
+        Assert.False(client.IsAlive(first));
+        Assert.True(client.IsAlive(recycled));
+        Assert.Equal(42, client.Get<Position>(recycled).X);
     }
 
     [Fact]
@@ -96,12 +211,18 @@ public class DeltaSyncTests
 
         var deltas = new DeltaSync().Register<Position>();
         deltas.EnableTracking(server);
+        server.ClearComponentChanges();
         server.Set(a, new Position { X = 3, Y = 4 });
 
         byte[] delta = deltas.Capture(server);
-        int typeCount = BitConverter.ToInt32(delta, 8);
+        Assert.Equal(3, BitConverter.ToInt32(delta, 4));
+        int despawnCount = BitConverter.ToInt32(delta, 8);
+        int spawnCount = BitConverter.ToInt32(delta, 12);
+        Assert.Equal(0, despawnCount);
+        Assert.Equal(0, spawnCount);
+        int typeCount = BitConverter.ToInt32(delta, 16);
         Assert.Equal(1, typeCount);
-        int typeHash = BitConverter.ToInt32(delta, 12);
+        int typeHash = BitConverter.ToInt32(delta, 20);
         Assert.Equal(typeof(Position).ComputeDeterministicHash(), typeHash);
 
         // FullName must not appear as a length-prefixed BinaryWriter string in the payload
@@ -134,7 +255,7 @@ public class DeltaSyncTests
     }
 
     [Fact]
-    public void BrotliRoundTrip_CompressesAndRestores()
+    public void BrotliRoundTrip_CompressesLargePayload()
     {
         var serializer = new WorldSerializer()
             .Register<Position>()
@@ -151,7 +272,7 @@ public class DeltaSyncTests
         var rawDeltas = new DeltaSync(compress: false).Register<Position>().Register<Velocity>();
         var brotliDeltas = new DeltaSync(compress: true).Register<Position>().Register<Velocity>();
         rawDeltas.EnableTracking(server);
-        // Tracking is world-side; one EnableTracking is enough. Register types on both syncers.
+        server.ClearComponentChanges();
 
         for (int id = 1; id <= 32; id++)
         {
@@ -164,6 +285,7 @@ public class DeltaSyncTests
         byte[] compressed = brotliDeltas.Capture(server);
 
         Assert.Equal((byte)'T', raw[3]);
+        Assert.True(raw.Length >= DeltaSync.DefaultCompressThreshold);
         Assert.Equal((byte)'B', compressed[3]);
         Assert.True(compressed.Length < raw.Length);
 
@@ -171,6 +293,53 @@ public class DeltaSyncTests
         Assert.True(client.TryGetAliveEntity(1, out var first));
         Assert.Equal(11, client.Get<Position>(first).X);
         Assert.Equal(2, client.Get<Velocity>(first).X);
+    }
+
+    [Fact]
+    public void AdaptiveCompression_SmallPayloadStaysUncompressed()
+    {
+        var serializer = new WorldSerializer().Register<Position>();
+        var server = new World();
+        var client = new World();
+        var a = server.Create(new Position { X = 1 });
+
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server));
+
+        var deltas = new DeltaSync(compress: true).Register<Position>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+        server.Set(a, new Position { X = 2 });
+
+        byte[] delta = deltas.Capture(server);
+        Assert.True(delta.Length > 0);
+        Assert.True(delta.Length < DeltaSync.DefaultCompressThreshold);
+        Assert.Equal((byte)'T', delta[3]); // still LDLT despite compress:true
+
+        deltas.Apply(client, delta);
+        Assert.Equal(2, client.Get<Position>(a).X);
+    }
+
+    [Fact]
+    public void AdaptiveCompression_RespectsCustomThreshold()
+    {
+        var serializer = new WorldSerializer().Register<Position>();
+        var server = new World();
+        var client = new World();
+        var a = server.Create(new Position { X = 1 });
+
+        var snapshots = new SnapshotSync(serializer);
+        snapshots.Apply(client, snapshots.Capture(server));
+
+        var deltas = new DeltaSync(compress: true, compressThreshold: 1_000_000).Register<Position>();
+        deltas.EnableTracking(server);
+        server.ClearComponentChanges();
+        server.Set(a, new Position { X = 3 });
+
+        byte[] delta = deltas.Capture(server);
+        Assert.Equal((byte)'T', delta[3]);
+        deltas.Apply(client, delta);
+        Assert.Equal(3, client.Get<Position>(a).X);
     }
 }
 

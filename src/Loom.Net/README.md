@@ -1,7 +1,7 @@
 # LoomECS.Net
 
 MVP multiplayer foundation for [LoomECS](https://www.nuget.org/packages/LoomECS): authoritative fixed-tick helpers,
-MemoryPack full-world snapshots, optional `TrackChanges` dirty deltas, and transport/command abstractions.
+MemoryPack full-world snapshots, optional `TrackChanges` dirty deltas (including spawn/despawn), and transport/command abstractions.
 
 **Not** a DOTS NetCode / rollback clone. No sockets are hardcoded — plug LiteNetLib, Mirror, Steam, etc.
 
@@ -28,7 +28,7 @@ Client                         Server (authoritative)
 | `NetworkClock` / `NetworkTick` | Fixed-tick accumulator |
 | `NetCommandBuffer` | Client→server commands ordered by tick |
 | `SnapshotSync` | Full-world MemoryPack capture + live apply |
-| `DeltaSync` | Dirty component ops via `TrackChanges` (wire type ids = `DeterministicHash`) |
+| `DeltaSync` | Spawn/despawn + dirty component ops via `TrackEntityLifecycle` / `TrackChanges` (wire type ids = `DeterministicHash`) |
 | `NetMessage` | Optional kind+tick framing |
 
 ## Snapshot apply on live clients
@@ -53,7 +53,7 @@ var deltas = new DeltaSync().Register<Position>().Register<Velocity>();
 
 // Server setup
 var serverWorld = new World();
-deltas.EnableTracking(serverWorld);
+deltas.EnableTracking(serverWorld); // TrackEntityLifecycle + TrackChanges for registered types
 var clock = new NetworkClock(tickDurationSeconds: 1f / 60f);
 var commands = new NetCommandBuffer();
 var serverTransport = new LoopbackTransport(localId: 1);
@@ -71,7 +71,7 @@ while (clock.TryAdvance(dt, out var tick))
     // Join / periodic correction:
     serverTransport.Broadcast(snapshots.CaptureFramed(serverWorld, tick.Index));
 
-    // Or thin dirty path (entities must already exist on clients):
+    // Ongoing dirty + structural path (after the client has joined via snapshot):
     // if (deltas.TryCapture(serverWorld, out var delta) && delta.Length > 0)
     //     serverTransport.Broadcast(NetMessage.Pack(NetMessageKind.Delta, tick.Index, delta));
     // serverWorld.ClearComponentChanges();
@@ -95,11 +95,12 @@ while (clientTransport.TryReceive(out var packet))
 - **No interest management** — snapshots are full-world
 - **`Parallel*` / nondeterminism** — parallel iteration order is not a sync contract; keep authoritative sim deterministic
 - **Shared components** — interned values restore correctly via snapshots; delta path uses `AddOrSet` (fine for value equality)
-- **Delta is not structural** — entity create/destroy needs a snapshot (or your own spawn messages)
+- **First join still needs SnapshotSync** — subsequent entity create/destroy can go via DeltaSync (v3 spawn/despawn)
 - **In-place `Get` edits** are not tracked — use `Set` / `MarkChanged`
-- Capture deltas **before** `ClearComponentChanges` / end of `Tick`
+- Capture deltas **before** `ClearComponentChanges` / end of `Tick` (also clears entity lifecycle lists)
 - **Empty deltas** — `TryCapture` returns false / `Capture` returns empty; skip the send (idle ≈ 0 B)
 - **Delta type ids** are `ComponentTypeTraits<T>.DeterministicHash` (int32). Snapshots stay name-based via WorldSerializer
+- **Adaptive compression** — `compress: true` means *allow* Brotli when payload ≥ threshold (default 256 B); tiny payloads stay LDLT / LCMP. Apply accepts both magics
 - Optional float3 wire packing: `NetFloat3Quantize` (3×Int16 or Half) at encode/decode boundary
 
 ## Install

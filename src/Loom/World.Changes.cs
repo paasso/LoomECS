@@ -13,6 +13,14 @@ namespace Loom
         private readonly List<IComponentChangeBuffer> _changeBufferList = new List<IComponentChangeBuffer>();
         private int _trackedChangeCount;
 
+        // Opt-in entity create/destroy tracking for net delta structural sync.
+        // Independent of TrackChanges<T>: zero cost when disabled.
+        private bool _trackEntityLifecycle;
+        private readonly List<Entity> _createdEntities = new List<Entity>();
+        private readonly List<Entity> _destroyedEntities = new List<Entity>();
+        private readonly HashSet<int> _createdEntityIds = new HashSet<int>();
+        private readonly HashSet<int> _destroyedEntityIds = new HashSet<int>();
+
         /// <summary>Enables Added/Removed/Changed recording for <typeparamref name="T"/> on this
         /// world. Call once at setup. Untracked types incur no per-mutation work.</summary>
         public World TrackChanges<T>() where T : struct
@@ -31,6 +39,49 @@ namespace Loom
         /// <summary>True when <see cref="TrackChanges{T}"/> was called for <typeparamref name="T"/>.</summary>
         public bool IsTrackingChanges<T>() where T : struct =>
             _trackedChangeCount > 0 && _changeBuffers.ContainsKey(typeof(T));
+
+        /// <summary>Enables recording of entity create/destroy since the last
+        /// <see cref="ClearComponentChanges"/>. Used by net delta structural sync.
+        /// Call once at setup. Independent of <see cref="TrackChanges{T}"/>.</summary>
+        public World TrackEntityLifecycle()
+        {
+            _trackEntityLifecycle = true;
+            return this;
+        }
+
+        /// <summary>True when <see cref="TrackEntityLifecycle"/> was called on this world.</summary>
+        public bool IsTrackingEntityLifecycle => _trackEntityLifecycle;
+
+        /// <summary>Number of entities created since the last <see cref="ClearComponentChanges"/>.</summary>
+        public int CreatedEntityCount => _trackEntityLifecycle ? _createdEntities.Count : 0;
+
+        /// <summary>Number of entities destroyed since the last <see cref="ClearComponentChanges"/>
+        /// (handles capture the version that was alive when destroyed).</summary>
+        public int DestroyedEntityCount => _trackEntityLifecycle ? _destroyedEntities.Count : 0;
+
+        /// <summary>True when any create/destroy was recorded since the last clear.</summary>
+        public bool AnyEntityLifecycleChanges =>
+            _trackEntityLifecycle && (_createdEntities.Count > 0 || _destroyedEntities.Count > 0);
+
+        /// <summary>Clears <paramref name="destination"/> and copies entities created since the last clear.</summary>
+        public void CopyCreatedEntitiesTo(List<Entity> destination)
+        {
+            if (destination == null)
+                throw new ArgumentNullException(nameof(destination));
+            destination.Clear();
+            if (_trackEntityLifecycle)
+                destination.AddRange(_createdEntities);
+        }
+
+        /// <summary>Clears <paramref name="destination"/> and copies entities destroyed since the last clear.</summary>
+        public void CopyDestroyedEntitiesTo(List<Entity> destination)
+        {
+            if (destination == null)
+                throw new ArgumentNullException(nameof(destination));
+            destination.Clear();
+            if (_trackEntityLifecycle)
+                destination.AddRange(_destroyedEntities);
+        }
 
         /// <summary>Overwrites an existing component value and, when tracking is enabled, records
         /// <c>Changed</c>. Throws if the entity does not have <typeparamref name="T"/>.
@@ -104,12 +155,77 @@ namespace Loom
         public void CopyChangedTo<T>(List<Entity> destination) where T : struct =>
             CopyChangeListTo<T>(destination, ChangeListKind.Changed);
 
-        /// <summary>Drops every recorded Added/Removed/Changed entry. Called automatically at the
-        /// end of <see cref="Tick"/> after events flush.</summary>
+        /// <summary>Drops every recorded Added/Removed/Changed entry and, when enabled, entity
+        /// create/destroy records. Called automatically at the end of <see cref="Tick"/> after
+        /// events flush.</summary>
         public void ClearComponentChanges()
         {
             for (int i = 0; i < _changeBufferList.Count; i++)
                 _changeBufferList[i].Clear();
+
+            if (_trackEntityLifecycle)
+            {
+                _createdEntities.Clear();
+                _destroyedEntities.Clear();
+                _createdEntityIds.Clear();
+                _destroyedEntityIds.Clear();
+            }
+        }
+
+        private void RecordEntityCreated(Entity entity)
+        {
+            if (!_trackEntityLifecycle)
+                return;
+
+            // Recycle in the same window: keep the Destroyed (old version) entry and also record Created.
+            if (!_createdEntityIds.Add(entity.Id))
+            {
+                for (int i = 0; i < _createdEntities.Count; i++)
+                {
+                    if (_createdEntities[i].Id == entity.Id)
+                    {
+                        _createdEntities[i] = entity;
+                        return;
+                    }
+                }
+            }
+
+            _createdEntities.Add(entity);
+        }
+
+        private void RecordEntityDestroyed(Entity entity)
+        {
+            if (!_trackEntityLifecycle)
+                return;
+
+            // Create+destroy same window: cancel the create (net no structural change).
+            if (_createdEntityIds.Remove(entity.Id))
+            {
+                for (int i = 0; i < _createdEntities.Count; i++)
+                {
+                    if (_createdEntities[i].Id == entity.Id)
+                    {
+                        _createdEntities.RemoveAt(i);
+                        break;
+                    }
+                }
+
+                return;
+            }
+
+            if (!_destroyedEntityIds.Add(entity.Id))
+            {
+                for (int i = 0; i < _destroyedEntities.Count; i++)
+                {
+                    if (_destroyedEntities[i].Id == entity.Id)
+                    {
+                        _destroyedEntities[i] = entity;
+                        return;
+                    }
+                }
+            }
+
+            _destroyedEntities.Add(entity);
         }
 
         private void ForEachChangeList<T>(Action<Entity> action, ChangeListKind kind) where T : struct

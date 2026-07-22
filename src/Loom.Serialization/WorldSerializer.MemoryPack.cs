@@ -12,8 +12,12 @@ namespace Loom
 {
     public sealed partial class WorldSerializer
     {
+        /// <summary>Default minimum uncompressed LCMP size before Brotli wrapping when
+        /// <paramref name="compress"/> is true.</summary>
+        public const int DefaultMemoryPackCompressThreshold = 256;
+
         /// <summary>Saves a world snapshot using MemoryPack for component/singleton payloads
-        /// (magic <c>LCMP</c>, or <c>LCMB</c> when <paramref name="compress"/> is true).
+        /// (magic <c>LCMP</c>, or <c>LCMB</c> when compression is applied).
         /// Faster and more compact than JSON snapshots for unmanaged component structs.
         /// <see cref="RegisterMigration{T}"/> and <see cref="RegisterFormatMigration"/> do not apply —
         /// payload versions must already match the registered target version.</summary>
@@ -22,17 +26,24 @@ namespace Loom
         /// MemoryPack annotations on the component type. Load/save keep component values typed —
         /// no boxing through <c>object</c>.
         /// <para>
-        /// When <paramref name="compress"/> is true, the LCMP body is compressed with MemoryPack's
-        /// <see cref="BrotliCompressor"/> (<see cref="CompressionLevel.Fastest"/>).
+        /// When <paramref name="compress"/> is true, Brotli wrapping is <em>allowed</em> via
+        /// MemoryPack's <see cref="BrotliCompressor"/> (<see cref="CompressionLevel.Fastest"/>)
+        /// only if the uncompressed LCMP length is ≥ <paramref name="compressThreshold"/>.
+        /// Smaller payloads stay raw LCMP. Load accepts both <c>LCMP</c> and <c>LCMB</c>.
         /// </para>
         /// </remarks>
-        public byte[] SaveToMemoryPack(World world, bool compress = false)
+        public byte[] SaveToMemoryPack(
+            World world,
+            bool compress = false,
+            int compressThreshold = DefaultMemoryPackCompressThreshold)
         {
             if (world == null)
                 throw new ArgumentNullException(nameof(world));
+            if (compressThreshold < 0)
+                throw new ArgumentOutOfRangeException(nameof(compressThreshold));
 
             byte[] raw = SaveToMemoryPackCore(world);
-            if (!compress)
+            if (!compress || raw.Length < compressThreshold)
                 return raw;
 
             using var compressor = new BrotliCompressor(CompressionLevel.Fastest);

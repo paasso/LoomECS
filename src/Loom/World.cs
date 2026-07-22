@@ -506,6 +506,8 @@ namespace Loom
 
             ref var rec = ref _records[entity.Id];
 
+            RecordEntityDestroyed(entity);
+
             if (_trackedChangeCount > 0)
                 RecordTrackedRemovalsOnDestroy(entity, ref rec);
 
@@ -863,7 +865,9 @@ namespace Loom
             }
 
             _records[id].IsAlive = true;
-            return new Entity(id, _records[id].Version);
+            var entity = new Entity(id, _records[id].Version);
+            RecordEntityCreated(entity);
+            return entity;
         }
 
         /// <summary>Used by <see cref="CommandBuffer.Create"/>: allocates a live id without placing

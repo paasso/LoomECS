@@ -42,9 +42,9 @@ static class TrafficProbe
                 new Vel { X = 1f, Y = 0f, Z = 0f });
         }
 
-        // Baseline full snapshot (join / resync). Clear create-time dirty lists first.
         world.ClearComponentChanges();
 
+        // Baseline full snapshot (join / resync).
         byte[] raw = snapshots.Capture(world);
         byte[] framed = snapshots.CaptureFramed(world, tick: 0);
         byte[] brotli = snapshotsBrotli.Capture(world);
@@ -55,12 +55,27 @@ static class TrafficProbe
         PrintHeader();
         PrintSize("Snapshot raw (LCMP, uncompressed)", raw.Length);
         PrintSize("Snapshot framed NetMessage (+9 B)", framed.Length);
-        PrintSize("Snapshot Brotli (LCMB)", brotli.Length);
+        PrintSize("Snapshot Brotli allowed (adaptive)", brotli.Length);
         PrintSize("Snapshot Brotli framed", brotliFramed.Length);
         PrintSize("Snapshot JSON (UTF-8)", jsonBytes);
         Console.WriteLine($"  magic={Encoding.ASCII.GetString(raw.AsSpan(0, 4))}  " +
-                          $"brotliMagic={Encoding.ASCII.GetString(brotli.AsSpan(0, 4))}");
+                          $"compressMagic={Encoding.ASCII.GetString(brotli.AsSpan(0, 4))}  " +
+                          $"(compress:true → LCMB only if ≥{DeltaSync.DefaultCompressThreshold} B)");
         Console.WriteLine();
+
+        // Tiny world: compress:true but below threshold → stays LCMP
+        {
+            var tiny = new World();
+            tiny.Create(new Pos { X = 1, Y = 2, Z = 3 }, new Vel { X = 0, Y = 0, Z = 0 });
+            byte[] tinyRaw = snapshots.Capture(tiny);
+            byte[] tinyAllow = snapshotsBrotli.Capture(tiny);
+            Console.WriteLine("Tiny snapshot (1 entity, compress:true adaptive)");
+            PrintSize("  raw / allow-compress", tinyRaw.Length);
+            Console.WriteLine($"  magic raw={Encoding.ASCII.GetString(tinyRaw.AsSpan(0, 4))}  " +
+                              $"allow={Encoding.ASCII.GetString(tinyAllow.AsSpan(0, 4))}  " +
+                              $"(expect both LCMP when under threshold)");
+            Console.WriteLine();
+        }
 
         // --- Delta scenarios (raw MemoryPack float3 payloads) ---
         // 1) Idle: no mutations after clear → empty capture (skip send)
@@ -110,6 +125,34 @@ static class TrafficProbe
         byte[] subsetQBrotli = CaptureQuantizedDelta(world, compress: true);
         PrintQuantizedRow("  quantized Int16 (±Brotli)", subsetQ, subsetQBrotli, subsetDirty.Length);
 
+        world.ClearComponentChanges();
+
+        // 4) Tiny dirty (1 entity) with compress:true → stays LDLT under threshold
+        world.Set(entities[0], new Pos { X = 99f, Y = 0f, Z = 0f });
+        byte[] tinyDirty = deltas.Capture(world);
+        byte[] tinyDirtyBrotli = deltasBrotli.Capture(world);
+        world.ClearComponentChanges();
+        Console.WriteLine("Delta 1/100 Pos dirty (adaptive compress:true)");
+        PrintSize("  raw (LDLT)", tinyDirty.Length);
+        PrintSize("  allow-compress", tinyDirtyBrotli.Length);
+        Console.WriteLine($"  magic raw={Encoding.ASCII.GetString(tinyDirty.AsSpan(0, 4))}  " +
+                          $"allow={Encoding.ASCII.GetString(tinyDirtyBrotli.AsSpan(0, 4))}  " +
+                          $"(expect LDLT when under {DeltaSync.DefaultCompressThreshold} B)");
+        Console.WriteLine();
+
+        // 5) Spawn 5 entities via delta (no snapshot)
+        for (int i = 0; i < 5; i++)
+        {
+            world.Create(
+                new Pos { X = 1000 + i, Y = 0f, Z = 0f },
+                new Vel { X = 0f, Y = 1f, Z = 0f });
+        }
+
+        byte[] spawnDelta = deltas.Capture(world);
+        byte[] spawnBrotli = deltasBrotli.Capture(world);
+        world.ClearComponentChanges();
+        PrintDeltaRow("Delta spawn 5 entities (Pos+Vel)", spawnDelta, spawnDelta, spawnBrotli, spawnBrotli);
+
         Console.WriteLine();
         Console.WriteLine("Mbps if sending THAT payload every tick (payload*8*Hz/1e6):");
         PrintMbps("Snapshot framed (uncompressed)", framed.Length);
@@ -122,6 +165,8 @@ static class TrafficProbe
         PrintMbps("Delta 10/100 Brotli framed", subsetBrotliFramed.Length);
         PrintMbps("Delta 10/100 quantized", subsetQ.Length);
         PrintMbps("Delta 10/100 quant+Brotli", subsetQBrotli.Length);
+        PrintMbps("Delta 1/100 (tiny)", tinyDirty.Length);
+        PrintMbps("Delta spawn 5", spawnDelta.Length);
         PrintMbps("Delta idle framed", idleFramed.Length);
         PrintMbps("Delta idle Brotli framed", idleBrotliFramed.Length);
 
@@ -129,13 +174,13 @@ static class TrafficProbe
         Console.WriteLine("Notes:");
         Console.WriteLine("  - Components: Pos/Vel each float3 (X,Y,Z = 12 B value), matching NetDemo.");
         Console.WriteLine("  - SnapshotSync still name-based via WorldSerializer (LCMP/LCMB/JSON unchanged).");
-        Console.WriteLine("  - DeltaSync v2 wire ids: ComponentTypeTraits<T>.DeterministicHash (int32).");
-        Console.WriteLine("  - DeltaSync default compress=false → LDLT; compress=true → LDLB.");
+        Console.WriteLine("  - DeltaSync v3: DeterministicHash type ids + spawn/despawn ops.");
+        Console.WriteLine("  - First join still needs SnapshotSync; later creates/destroys can use delta.");
+        Console.WriteLine($"  - compress:true = allow Brotli when payload ≥ {DeltaSync.DefaultCompressThreshold} B; else stay LDLT/LCMP.");
         Console.WriteLine("  - Empty dirty lists → Capture/TryCapture return 0 B (skip send; idle ≈ 0 B).");
         Console.WriteLine("  - Quantized probe: same LDLT layout, MemoryPack float3 replaced by 3×Int16 (cm).");
         Console.WriteLine("  - Brotli = MemoryPack BrotliCompressor(CompressionLevel.Fastest).");
         Console.WriteLine("  - NetMessage framing = 1 byte kind + 8 byte tick = +9 bytes (only when non-empty).");
-        Console.WriteLine("  - Entity spawn/despawn not in delta MVP (use SnapshotSync for joins).");
     }
 
     /// <summary>
@@ -149,7 +194,9 @@ static class TrafficProbe
         using (var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
         {
             writer.Write(new byte[] { (byte)'L', (byte)'D', (byte)'L', (byte)'T' });
-            writer.Write(2); // formatVersion matching DeltaSync v2
+            writer.Write(3); // formatVersion matching DeltaSync v3
+            writer.Write(0); // despawnCount
+            writer.Write(0); // spawnCount
 
             int posOps = CountOpsFor<Pos>(world, scratch);
             int velOps = CountOpsFor<Vel>(world, scratch);
@@ -166,7 +213,7 @@ static class TrafficProbe
         }
 
         byte[] raw = ms.ToArray();
-        if (!compress)
+        if (!compress || raw.Length < DeltaSync.DefaultCompressThreshold)
             return raw;
 
         using var compressor = new BrotliCompressor(CompressionLevel.Fastest);

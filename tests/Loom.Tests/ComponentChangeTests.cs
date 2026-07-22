@@ -311,4 +311,75 @@ public class ComponentChangeTests
         Assert.Single(world.Query(in filter).ToList());
         Assert.Empty(world.Query().Changed<Position>().ToList());
     }
+
+    [Fact]
+    public void TrackEntityLifecycle_RecordsCreateAndDestroy()
+    {
+        var world = new World();
+        world.TrackEntityLifecycle();
+
+        var a = world.Create(new Position { X = 1 });
+        var b = world.Create();
+        Assert.Equal(2, world.CreatedEntityCount);
+        Assert.Equal(0, world.DestroyedEntityCount);
+
+        world.ClearComponentChanges();
+        Assert.Equal(0, world.CreatedEntityCount);
+
+        world.Destroy(b);
+        Assert.Equal(1, world.DestroyedEntityCount);
+
+        var destroyed = new List<Entity>();
+        world.CopyDestroyedEntitiesTo(destroyed);
+        Assert.Equal(new[] { b }, destroyed);
+        Assert.True(world.IsAlive(a));
+    }
+
+    [Fact]
+    public void TrackEntityLifecycle_CreateThenDestroy_Cancels()
+    {
+        var world = new World();
+        world.TrackEntityLifecycle();
+        var e = world.Create();
+        world.Destroy(e);
+
+        Assert.Equal(0, world.CreatedEntityCount);
+        Assert.Equal(0, world.DestroyedEntityCount);
+        Assert.False(world.AnyEntityLifecycleChanges);
+    }
+
+    [Fact]
+    public void TrackEntityLifecycle_DestroyThenRecreate_KeepsBoth()
+    {
+        var world = new World();
+        world.TrackEntityLifecycle();
+        var first = world.Create(new Position());
+        world.ClearComponentChanges();
+
+        world.Destroy(first);
+        var second = world.Create(new Position { X = 9 });
+        Assert.Equal(first.Id, second.Id);
+        Assert.NotEqual(first.Version, second.Version);
+
+        Assert.Equal(1, world.DestroyedEntityCount);
+        Assert.Equal(1, world.CreatedEntityCount);
+
+        var destroyed = new List<Entity>();
+        var created = new List<Entity>();
+        world.CopyDestroyedEntitiesTo(destroyed);
+        world.CopyCreatedEntitiesTo(created);
+        Assert.Equal(first, destroyed[0]);
+        Assert.Equal(second, created[0]);
+    }
+
+    [Fact]
+    public void UntrackedEntityLifecycle_DoesNotRecord()
+    {
+        var world = new World();
+        var e = world.Create();
+        world.Destroy(e);
+        Assert.Equal(0, world.CreatedEntityCount);
+        Assert.Equal(0, world.DestroyedEntityCount);
+        Assert.False(world.IsTrackingEntityLifecycle);
+    }
 }

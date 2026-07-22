@@ -427,6 +427,7 @@ public class SerializationTests
         byte[] raw = serializer.SaveToMemoryPack(world, compress: false);
         byte[] compressed = serializer.SaveToMemoryPack(world, compress: true);
 
+        Assert.True(raw.Length >= WorldSerializer.DefaultMemoryPackCompressThreshold);
         Assert.Equal((byte)'B', compressed[3]);
         Assert.True(compressed.Length < raw.Length);
 
@@ -434,6 +435,22 @@ public class SerializationTests
         serializer.LoadFromMemoryPack(loaded, compressed);
         Assert.Equal(200, loaded.EntityCount);
         Assert.Equal(42, loaded.Get<Position>(new Entity(43, 0)).X);
+    }
+
+    [Fact]
+    public void MemoryPackAdaptiveCompression_SmallPayloadStaysUncompressed()
+    {
+        var world = new World();
+        world.Create(new Position { X = 1 });
+
+        var serializer = CreateSerializer();
+        byte[] bytes = serializer.SaveToMemoryPack(world, compress: true);
+        Assert.Equal((byte)'P', bytes[3]);
+        Assert.True(bytes.Length < WorldSerializer.DefaultMemoryPackCompressThreshold);
+
+        var loaded = new World();
+        serializer.LoadFromMemoryPack(loaded, bytes);
+        Assert.Equal(1, loaded.Get<Position>(new Entity(1, 0)).X);
     }
 
     [Fact]
