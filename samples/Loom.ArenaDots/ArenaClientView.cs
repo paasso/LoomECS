@@ -41,6 +41,7 @@ sealed class ArenaClientView
 
     long _lastReconciledTick = -1;
     ReconcileResult _lastReconcile;
+    readonly PredictionCounters _counters = new();
 
     public ArenaClientView(NetClient client, int localPeerId)
     {
@@ -61,6 +62,7 @@ sealed class ArenaClientView
     public StateInterpolator Interpolator => _interpolator;
     public ClientPredictor<PredictedPlayerState> Predictor => _predictor;
     public ReconcileResult LastReconcile => _lastReconcile;
+    public PredictionCounters Counters => _counters;
 
     public void SendMoveAndPredict(long tick, float dx, float dy)
     {
@@ -175,6 +177,7 @@ sealed class ArenaClientView
                 VelX = cur.VelX + (rec.VelX - cur.VelX) * alpha,
                 VelY = cur.VelY + (rec.VelY - cur.VelY) * alpha,
             });
+        _counters.Record(_lastReconcile);
         _lastReconciledTick = tick;
     }
 

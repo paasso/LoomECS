@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.1;net10.0</TargetFrameworks>
+    <LangVersion>10.0</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>Loom.Net.LiteNetLib</RootNamespace>
+    <AssemblyName>Loom.Net.LiteNetLib</AssemblyName>
+    <IsPackable>true</IsPackable>
+    <PackageId>LoomECS.Net.LiteNetLib</PackageId>
+    <Title>Loom ECS Net LiteNetLib</Title>
+    <Description>Optional LiteNetLib adapter implementing Loom.Net.INetTransport so core LoomECS.Net stays socket-free.</Description>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>loom-logo.png</PackageIcon>
+    <PackageReleaseNotes>Initial LiteNetLib INetTransport adapter for LoomECS.Net.</PackageReleaseNotes>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <PackageTags>ecs;multiplayer;networking;litenetlib;udp;dotnet</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LiteNetLib" Version="2.1.4" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Loom.Net\Loom.Net.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+    <None Include="..\..\docs\loom-logo.png" Pack="true" PackagePath="\" />
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+</Project>

@@ -28,6 +28,9 @@ Client                         Server (authoritative)
 |------|------|
 | `INetTransport` | Byte send/receive/broadcast seam |
 | `LoopbackTransport` | In-process duplex for tests/samples |
+| `DelayedTransport` | Queues outbound packets for one-way or RTT latency (+jitter) |
+| `MeteredTransport` | Counts framed tx/rx bytes for approx Mbps |
+| `PredictionCounters` | Soft/hard correct + replay tallies from reconcile results |
 | `NetSessionRole` | Server / Client |
 | `NetworkClock` / `NetworkTick` | Fixed-tick accumulator |
 | `NetCommandBuffer` | Client→server commands ordered by tick |
@@ -171,7 +174,7 @@ while (clientTransport.TryReceive(out var packet))
 
 - **Prediction / interpolation are opt-in helpers** — `ClientPredictor` and `StateInterpolator` do not replace the authoritative sim world; mis-matched client/server step functions will desync until hard-correct
 - **No interest management / AOI** — snapshots and deltas are full-world
-- **No sockets** — `INetTransport` only; bring your own reliability/ordering if the wire needs it
+- **No sockets in core** — `INetTransport` only; use `LoopbackTransport` / `DelayedTransport` in tests, or `LoomECS.Net.LiteNetLib` for UDP
 - **`Parallel*` / nondeterminism** — parallel iteration order is not a sync contract; keep authoritative sim deterministic
 - **Shared components** — interned values restore correctly via snapshots; delta path uses `AddOrSet` (fine for value equality)
 - **First join still needs SnapshotSync** — subsequent entity create/destroy can go via DeltaSync (v3 spawn/despawn)
@@ -193,4 +196,6 @@ dotnet add package LoomECS.Net
 
 Samples:
 - `samples/Loom.NetDemo` (`--session` for `AuthoritativeServer` / `NetClient`, `--demo` for the manual loop)
-- `samples/Loom.ArenaDots` — 2–4 player arena dots over loopback (console convergence log or `--visual` Raylib)
+- `samples/Loom.ArenaDots` — arena dots over loopback, `--latency`, or two-process `--listen` / `--connect` (LiteNetLib)
+
+Optional UDP adapter: `dotnet add package LoomECS.Net.LiteNetLib` (`LiteNetLibTransport : INetTransport`).

@@ -13,6 +13,7 @@
     <ProjectReference Include="..\..\src\Loom\Loom.csproj" />
     <ProjectReference Include="..\..\src\Loom.Serialization\Loom.Serialization.csproj" />
     <ProjectReference Include="..\..\src\Loom.Net\Loom.Net.csproj" />
+    <ProjectReference Include="..\..\src\Loom.Net.LiteNetLib\Loom.Net.LiteNetLib.csproj" />
   </ItemGroup>
 
   <ItemGroup>
