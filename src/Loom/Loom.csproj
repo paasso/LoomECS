@@ -9,10 +9,10 @@
     <IsPackable>true</IsPackable>
     <PackageId>LoomECS</PackageId>
     <Title>Loom ECS</Title>
-    <Description>Minimal hybrid C# ECS: archetype columns for dense data, sparse-set storage for high-churn components, systems, commands, and events. Includes the Loom.Generators Roslyn analyzer. Optional snapshots: LoomECS.Serialization.</Description>
+    <Description>Minimal hybrid C# ECS: archetype columns for dense data, sparse-set storage for high-churn components, systems, commands, and events. Includes the Loom.Generators Roslyn analyzer. Optional snapshots: LoomECS.Serialization. Optional multiplayer preview: LoomECS.Net.</Description>
     <PackageReadmeFile>PACKAGE.md</PackageReadmeFile>
     <PackageIcon>loom-logo.png</PackageIcon>
-    <PackageReleaseNotes>Initial NuGet release of LoomECS (hybrid archetype + sparse-set ECS).</PackageReleaseNotes>
+    <PackageReleaseNotes>0.2.0: LoomECS.Net networking preview (snapshot/delta sync packages); TrackEntityLifecycle / World.Reset helpers for live client resync.</PackageReleaseNotes>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <!-- Optional safe SIMD for ComponentMask: -p:LoomSimd=true (source builds; NuGet ships the default safe build). -->

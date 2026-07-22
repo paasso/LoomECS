@@ -170,6 +170,7 @@ namespace Loom.Net.LiteNetLib
             remove => _peerConnected -= value;
         }
 
+        /// <summary>Raised after a known peer disconnects (host or client).</summary>
         public event Action<NetPeerId>? PeerDisconnected
         {
             add => _peerDisconnected += value;

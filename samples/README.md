@@ -15,8 +15,8 @@ Non-Unity demos under `samples/`. Each project focuses on one library feature.
 | [Loom.Systems](Loom.Systems/) | Owned groups, ordering, lifecycle, nested groups, `IParallelSystem` |
 | [Loom.ScheduleRates](Loom.ScheduleRates/) | Init / simulation / presentation groups at different rates (`Run` + `EndFrame`) |
 | [Loom.SerializationDemo](Loom.SerializationDemo/) | `WorldSerializer` JSON snapshots |
-| [Loom.NetDemo](Loom.NetDemo/) | Authoritative tick → MemoryPack snapshot/delta over loopback |
-| [Loom.ArenaDots](Loom.ArenaDots/) | Multiplayer arena dots (`AuthoritativeServer` + N clients, console / Raylib) |
+| [Loom.NetDemo](Loom.NetDemo/) | Authoritative tick → MemoryPack snapshot/delta over loopback (`LoomECS.Net`) |
+| [Loom.ArenaDots](Loom.ArenaDots/) | Multiplayer arena dots: prediction, `--latency`, LiteNetLib `--listen` / `--connect` |
 | [Loom.Accessors](Loom.Accessors/) | `[EcsComponent]` source-generator accessors |
 
 ```bash

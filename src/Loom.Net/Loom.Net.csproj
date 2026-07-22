@@ -13,7 +13,7 @@
     <Description>MVP multiplayer foundation for LoomECS: authoritative fixed-tick helpers, MemoryPack snapshot sync, TrackChanges dirty deltas, and transport/command abstractions (no sockets hardcoded).</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>loom-logo.png</PackageIcon>
-    <PackageReleaseNotes>Initial NuGet release of LoomECS.Net (snapshot + delta sync MVP).</PackageReleaseNotes>
+    <PackageReleaseNotes>0.2.0: LoomECS.Net preview — snapshot/delta sync, AuthoritativeServer/NetClient, prediction/interpolation helpers, DelayedTransport/MeteredTransport, optional LiteNetLib adapter.</PackageReleaseNotes>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageTags>ecs;entity-component-system;multiplayer;networking;snapshot;delta;dotnet</PackageTags>

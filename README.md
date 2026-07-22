@@ -16,6 +16,10 @@ Hybrid C# ECS with **archetype columns** for dense data, opt-in **sparse sets** 
 dotnet add package LoomECS
 # optional snapshots:
 dotnet add package LoomECS.Serialization
+# optional multiplayer preview:
+dotnet add package LoomECS.Net
+# optional UDP adapter:
+dotnet add package LoomECS.Net.LiteNetLib
 ```
 
 ## Core capabilities
@@ -118,6 +122,7 @@ world.Query().Each<MoveJob, Position, Velocity>(ref job);
 - [x] Opt-in component change tracking (`TrackChanges` / `ChangeQuery`)
 - [x] Prefabs, father/child tree, `IRelationComponent` links
 - [x] JSON / MemoryPack snapshots + migrations (`LoomECS.Serialization`)
+- [x] Networking (preview) — snapshot/delta sync, authoritative tick helpers (`LoomECS.Net`); optional LiteNetLib UDP
 - [x] `[EcsComponent]` source generator accessors
 - [x] Unity package: runner, Entity Debugger, Flappy Bird / Speed Demo / HordeRush
 
@@ -139,11 +144,24 @@ world.Query().Each<MoveJob, Position, Velocity>(ref job);
 dotnet run -c Release --project benchmarks/Loom.Benchmarks -- --filter *DenseIteration*
 ```
 
+## Networking (preview)
+
+Pluggable transport seam (`INetTransport`), MemoryPack snapshots + dirty deltas, `AuthoritativeServer` / `NetClient`, and opt-in prediction / interpolation. No sockets in core — use loopback / delayed wrappers in tests, or `LoomECS.Net.LiteNetLib` for UDP.
+
+| | |
+|--|--|
+| Package docs | [src/Loom.Net/README.md](src/Loom.Net/README.md) |
+| LiteNetLib adapter | [src/Loom.Net.LiteNetLib/README.md](src/Loom.Net.LiteNetLib/README.md) |
+| Arena Dots sample | [samples/Loom.ArenaDots](samples/Loom.ArenaDots/README.md) |
+
+API may change before 1.0.
+
 ## Samples & docs
 
 | | |
 |--|--|
 | Console demos (per feature) | [samples/README.md](samples/README.md) |
+| Networking (preview) | [src/Loom.Net/README.md](src/Loom.Net/README.md) |
 | Benchmarks | [benchmarks/Loom.Benchmarks](benchmarks/Loom.Benchmarks/README.md) |
 | Unity UPM | [integrations/Unity/com.loom.ecs](integrations/Unity/com.loom.ecs/README.md) |
 
@@ -158,6 +176,8 @@ dotnet run -c Release --project samples/Loom.SpeedDemo -- --headless --entities 
 dotnet test
 dotnet pack src/Loom/Loom.csproj -c Release -o artifacts/nuget
 dotnet pack src/Loom.Serialization/Loom.Serialization.csproj -c Release -o artifacts/nuget
+dotnet pack src/Loom.Net/Loom.Net.csproj -c Release -o artifacts/nuget
+dotnet pack src/Loom.Net.LiteNetLib/Loom.Net.LiteNetLib.csproj -c Release -o artifacts/nuget
 ```
 
 Optional mask SIMD (source builds): `-p:LoomSimd=true`. Publish by pushing a `v*` tag when `NUGET_API_KEY` is set — see [.github/workflows/release.yml](.github/workflows/release.yml).

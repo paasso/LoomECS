@@ -15,13 +15,18 @@ namespace Loom.Net
     public delegate TState PredictionBlendHandler<TState>(in TState current, in TState reconciled, float alpha)
         where TState : struct;
 
+    /// <summary>How <see cref="ClientPredictor{TState}.Reconcile"/> adjusted predicted state.</summary>
     public enum CorrectionKind : byte
     {
+        /// <summary>Error was within the soft threshold; prediction left unchanged.</summary>
         None = 0,
+        /// <summary>Error blended toward authoritative via the soft blend handler.</summary>
         Soft = 1,
+        /// <summary>Error exceeded the hard threshold; state snapped to authoritative then replayed.</summary>
         Hard = 2,
     }
 
+    /// <summary>Outcome of one reconcile pass (correction kind, measured error, inputs replayed).</summary>
     public readonly struct ReconcileResult
     {
         public ReconcileResult(CorrectionKind kind, float error, int replayed)

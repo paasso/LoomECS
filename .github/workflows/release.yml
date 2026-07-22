@@ -34,6 +34,10 @@ jobs:
             -p:Version=$VER -p:PackageVersion=$VER
           dotnet pack src/Loom.Serialization/Loom.Serialization.csproj -c Release -o artifacts/nuget \
             -p:Version=$VER -p:PackageVersion=$VER
+          dotnet pack src/Loom.Net/Loom.Net.csproj -c Release -o artifacts/nuget \
+            -p:Version=$VER -p:PackageVersion=$VER
+          dotnet pack src/Loom.Net.LiteNetLib/Loom.Net.LiteNetLib.csproj -c Release -o artifacts/nuget \
+            -p:Version=$VER -p:PackageVersion=$VER
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

@@ -12,7 +12,7 @@
     <Description>Optional LiteNetLib adapter implementing Loom.Net.INetTransport so core LoomECS.Net stays socket-free.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageIcon>loom-logo.png</PackageIcon>
-    <PackageReleaseNotes>Initial LiteNetLib INetTransport adapter for LoomECS.Net.</PackageReleaseNotes>
+    <PackageReleaseNotes>0.2.0: Optional LiteNetLib INetTransport adapter for LoomECS.Net (UDP host/client over reliable-ordered channels).</PackageReleaseNotes>
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <PackageTags>ecs;multiplayer;networking;litenetlib;udp;dotnet</PackageTags>

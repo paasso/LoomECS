@@ -5,7 +5,7 @@ MemoryPack full-world snapshots, optional `TrackChanges` dirty deltas (including
 
 **Not** a DOTS NetCode / rollback clone. No sockets are hardcoded — plug LiteNetLib, Mirror, Steam, etc.
 
-**Target:** `netstandard2.1` + `net10.0` · **License:** MIT · **Package:** `LoomECS.Net`
+**Target:** `netstandard2.1` + `net10.0` · **License:** MIT · **Package:** `LoomECS.Net` · **Version:** 0.2.0 (preview)
 
 ## Architecture
 
