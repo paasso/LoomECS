@@ -1,11 +1,14 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using Loom;
 using Loom.Entities;
 using MemoryPack;
+using MemoryPack.Compression;
 
 namespace Loom.Net
 {
@@ -25,15 +28,29 @@ namespace Loom.Net
     /// <c>Tick</c>, otherwise the dirty lists are empty. Prefer mutating via <c>Set</c> /
     /// <c>MarkChanged</c> so in-place <c>Get</c> edits are recorded.
     /// </para>
+    /// <para>
+    /// When constructed with <c>compress: true</c>, Capture wraps the LDLT body with MemoryPack's
+    /// <see cref="BrotliCompressor"/> (<see cref="CompressionLevel.Fastest"/>) under magic
+    /// <c>LDLB</c> (same approach as SnapshotSync / LCMB). Apply accepts both LDLT and LDLB.
+    /// </para>
     /// </remarks>
     public sealed class DeltaSync
     {
         private const int FormatVersion = 1;
         private static readonly byte[] Magic = { (byte)'L', (byte)'D', (byte)'L', (byte)'T' };
+        /// <summary>ASCII magic for Brotli-compressed deltas: "LDLB".
+        /// Payload after the magic is MemoryPack <c>BrotliCompressor</c> output of a full LDLT delta.</summary>
+        private static readonly byte[] BrotliMagic = { (byte)'L', (byte)'D', (byte)'L', (byte)'B' };
 
         private readonly List<IDeltaHandler> _handlers = new List<IDeltaHandler>();
         private readonly Dictionary<string, IDeltaHandler> _byName =
             new Dictionary<string, IDeltaHandler>(StringComparer.Ordinal);
+        private readonly bool _compress;
+
+        public DeltaSync(bool compress = false)
+        {
+            _compress = compress;
+        }
 
         /// <summary>Registers <typeparamref name="T"/> for dirty capture/apply. Call
         /// <see cref="World.TrackChanges{T}"/> on the server world during setup.</summary>
@@ -60,7 +77,8 @@ namespace Loom.Net
                 _handlers[i].EnableTracking(world);
         }
 
-        /// <summary>Serializes dirty component ops since the last change clear.</summary>
+        /// <summary>Serializes dirty component ops since the last change clear.
+        /// Returns LDLT (raw) or LDLB (Brotli) depending on construction.</summary>
         public byte[] Capture(World world)
         {
             if (world == null)
@@ -68,26 +86,36 @@ namespace Loom.Net
             if (_handlers.Count == 0)
                 throw new InvalidOperationException("Register at least one component type before Capture.");
 
-            using var ms = new MemoryStream();
-            using (var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
-            {
-                writer.Write(Magic);
-                writer.Write(FormatVersion);
-                writer.Write(_handlers.Count);
-                for (int i = 0; i < _handlers.Count; i++)
-                    _handlers[i].Write(writer, world);
-            }
+            byte[] raw = CaptureRaw(world);
+            if (!_compress)
+                return raw;
 
-            return ms.ToArray();
+            using var compressor = new BrotliCompressor(CompressionLevel.Fastest);
+            MemoryPackSerializer.Serialize(compressor, raw);
+            byte[] compressed = compressor.ToArray();
+
+            var result = new byte[4 + compressed.Length];
+            BrotliMagic.CopyTo(result, 0);
+            Buffer.BlockCopy(compressed, 0, result, 4, compressed.Length);
+            return result;
         }
 
-        /// <summary>Applies a delta produced by <see cref="Capture"/> onto a peer world.</summary>
+        /// <summary>Applies a delta produced by <see cref="Capture"/> onto a peer world.
+        /// Accepts uncompressed (<c>LDLT</c>) or Brotli-wrapped (<c>LDLB</c>) payloads.</summary>
         public void Apply(World world, byte[] delta)
         {
             if (world == null)
                 throw new ArgumentNullException(nameof(world));
             if (delta == null)
                 throw new ArgumentNullException(nameof(delta));
+
+            if (HasMagic(delta, BrotliMagic))
+            {
+                using var decompressor = new BrotliDecompressor();
+                ReadOnlySequence<byte> seq = decompressor.Decompress(delta.AsSpan(4));
+                delta = MemoryPackSerializer.Deserialize<byte[]>(seq)
+                        ?? throw new InvalidOperationException("Brotli delta decompressed to null.");
+            }
 
             using var ms = new MemoryStream(delta, writable: false);
             using var reader = new BinaryReader(ms, Encoding.UTF8, leaveOpen: false);
@@ -137,6 +165,26 @@ namespace Loom.Net
 
             Apply(world, payload.ToArray());
         }
+
+        private byte[] CaptureRaw(World world)
+        {
+            using var ms = new MemoryStream();
+            using (var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true))
+            {
+                writer.Write(Magic);
+                writer.Write(FormatVersion);
+                writer.Write(_handlers.Count);
+                for (int i = 0; i < _handlers.Count; i++)
+                    _handlers[i].Write(writer, world);
+            }
+
+            return ms.ToArray();
+        }
+
+        private static bool HasMagic(byte[] bytes, byte[] magic) =>
+            bytes.Length >= 4 &&
+            bytes[0] == magic[0] && bytes[1] == magic[1] &&
+            bytes[2] == magic[2] && bytes[3] == magic[3];
 
         private interface IDeltaHandler
         {

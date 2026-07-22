@@ -19,7 +19,10 @@ static class TrafficProbe
 
         var snapshots = new SnapshotSync(serializer, compress: false);
         var snapshotsBrotli = new SnapshotSync(serializer, compress: true);
-        var deltas = new DeltaSync()
+        var deltas = new DeltaSync(compress: false)
+            .Register<Pos>()
+            .Register<Vel>();
+        var deltasBrotli = new DeltaSync(compress: true)
             .Register<Pos>()
             .Register<Vel>();
 
@@ -58,8 +61,9 @@ static class TrafficProbe
         // 1) Idle: no mutations after clear
         byte[] idle = deltas.Capture(world);
         byte[] idleFramed = deltas.CaptureFramed(world, tick: 1);
-        PrintSize("Delta idle / no changes (raw)", idle.Length);
-        PrintSize("Delta idle framed", idleFramed.Length);
+        byte[] idleBrotli = deltasBrotli.Capture(world);
+        byte[] idleBrotliFramed = deltasBrotli.CaptureFramed(world, tick: 1);
+        PrintDeltaRow("Delta idle / no changes", idle, idleFramed, idleBrotli, idleBrotliFramed);
 
         world.ClearComponentChanges();
 
@@ -72,8 +76,9 @@ static class TrafficProbe
 
         byte[] allDirty = deltas.Capture(world);
         byte[] allDirtyFramed = deltas.CaptureFramed(world, tick: 2);
-        PrintSize("Delta all 100 Pos+Vel dirty (raw)", allDirty.Length);
-        PrintSize("Delta all 100 framed", allDirtyFramed.Length);
+        byte[] allDirtyBrotli = deltasBrotli.Capture(world);
+        byte[] allDirtyBrotliFramed = deltasBrotli.CaptureFramed(world, tick: 2);
+        PrintDeltaRow("Delta all 100 Pos+Vel dirty", allDirty, allDirtyFramed, allDirtyBrotli, allDirtyBrotliFramed);
 
         world.ClearComponentChanges();
 
@@ -87,20 +92,27 @@ static class TrafficProbe
 
         byte[] subsetDirty = deltas.Capture(world);
         byte[] subsetFramed = deltas.CaptureFramed(world, tick: 3);
-        PrintSize($"Delta {subset}/100 Pos+Vel dirty (raw)", subsetDirty.Length);
-        PrintSize($"Delta {subset}/100 framed", subsetFramed.Length);
+        byte[] subsetBrotli = deltasBrotli.Capture(world);
+        byte[] subsetBrotliFramed = deltasBrotli.CaptureFramed(world, tick: 3);
+        PrintDeltaRow($"Delta {subset}/100 Pos+Vel dirty", subsetDirty, subsetFramed, subsetBrotli, subsetBrotliFramed);
 
         Console.WriteLine();
         Console.WriteLine("Mbps if sending THAT payload every tick (payload*8*Hz/1e6):");
         PrintMbps("Snapshot framed (uncompressed)", framed.Length);
+        PrintMbps("Snapshot Brotli framed", brotliFramed.Length);
         PrintMbps("Delta all-dirty framed", allDirtyFramed.Length);
+        PrintMbps("Delta all-dirty Brotli framed", allDirtyBrotliFramed.Length);
         PrintMbps("Delta 10/100 framed", subsetFramed.Length);
+        PrintMbps("Delta 10/100 Brotli framed", subsetBrotliFramed.Length);
         PrintMbps("Delta idle framed", idleFramed.Length);
+        PrintMbps("Delta idle Brotli framed", idleBrotliFramed.Length);
 
         Console.WriteLine();
         Console.WriteLine("Notes:");
         Console.WriteLine("  - Components: Pos/Vel each float3 (X,Y,Z = 12 B value), matching NetDemo.");
-        Console.WriteLine("  - SnapshotSync default compress=false → LCMP (uncompressed MemoryPack).");
+        Console.WriteLine("  - SnapshotSync default compress=false → LCMP; compress=true → LCMB.");
+        Console.WriteLine("  - DeltaSync default compress=false → LDLT; compress=true → LDLB.");
+        Console.WriteLine("  - Brotli = MemoryPack BrotliCompressor(CompressionLevel.Fastest).");
         Console.WriteLine("  - NetMessage framing = 1 byte kind + 8 byte tick = +9 bytes.");
         Console.WriteLine("  - DeltaSync LDLT: type names + entity id/version + MemoryPack payloads;");
         Console.WriteLine("    idle still emits headers for each registered type with zero ops.");
@@ -110,6 +122,19 @@ static class TrafficProbe
     static void PrintHeader()
     {
         Console.WriteLine($"=== Loom.Net traffic probe: {EntityCount} entities × Pos+Vel (float3) ===");
+        Console.WriteLine();
+    }
+
+    static void PrintDeltaRow(string label, byte[] raw, byte[] framed, byte[] brotli, byte[] brotliFramed)
+    {
+        Console.WriteLine(label);
+        PrintSize("  raw (LDLT)", raw.Length);
+        PrintSize("  framed", framed.Length);
+        PrintSize("  Brotli (LDLB)", brotli.Length);
+        PrintSize("  Brotli framed", brotliFramed.Length);
+        Console.WriteLine($"  magic={Encoding.ASCII.GetString(raw.AsSpan(0, 4))}  " +
+                          $"brotliMagic={Encoding.ASCII.GetString(brotli.AsSpan(0, 4))}  " +
+                          $"ratio={100.0 * brotli.Length / raw.Length:F1}% of raw");
         Console.WriteLine();
     }
 
