@@ -33,6 +33,47 @@ sealed class ArenaSim : IAuthoritativeSimulation
 
     public static byte[] EncodeFire() => new[] { OpFire };
 
+    public static bool TryDecodeMove(ReadOnlySpan<byte> payload, out float dx, out float dy)
+    {
+        dx = 0f;
+        dy = 0f;
+        if (payload.Length < 1 + 8 || payload[0] != OpMove)
+            return false;
+        dx = Math.Clamp(BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(1)), -1f, 1f);
+        dy = Math.Clamp(BinaryPrimitives.ReadSingleLittleEndian(payload.Slice(5)), -1f, 1f);
+        return true;
+    }
+
+    /// <summary>
+    /// Shared player integration used by the authoritative server and client prediction.
+    /// </summary>
+    public static void IntegratePlayer(
+        ref float posX, ref float posY,
+        ref float velX, ref float velY,
+        float thrustX, float thrustY,
+        float dt)
+    {
+        velX += thrustX * Accel * dt;
+        velY += thrustY * Accel * dt;
+
+        float damp = MathF.Exp(-Friction * dt);
+        velX *= damp;
+        velY *= damp;
+
+        float len = MathF.Sqrt(velX * velX + velY * velY);
+        if (len > MaxSpeed)
+        {
+            float s = MaxSpeed / len;
+            velX *= s;
+            velY *= s;
+        }
+
+        posX += velX * dt;
+        posY += velY * dt;
+        posX = Math.Clamp(posX, -HalfExtent + PlayerRadius, HalfExtent - PlayerRadius);
+        posY = Math.Clamp(posY, -HalfExtent + PlayerRadius, HalfExtent - PlayerRadius);
+    }
+
     public void ApplyCommand(World world, NetCommand command)
     {
         var payload = command.Payload;
@@ -47,11 +88,9 @@ sealed class ArenaSim : IAuthoritativeSimulation
         {
             case OpMove:
             {
-                if (payload.Length < 1 + 8)
+                if (!TryDecodeMove(payload, out float dx, out float dy))
                     return;
-                float dx = BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(1));
-                float dy = BinaryPrimitives.ReadSingleLittleEndian(payload.AsSpan(5));
-                _thrust[peer] = (Math.Clamp(dx, -1f, 1f), Math.Clamp(dy, -1f, 1f));
+                _thrust[peer] = (dx, dy);
                 break;
             }
             case OpFire:
@@ -83,22 +122,14 @@ sealed class ArenaSim : IAuthoritativeSimulation
         world.Query().Each<Pos, Vel, PlayerOwner>((Entity e, ref Pos pos, ref Vel vel, ref PlayerOwner owner) =>
         {
             float ox = vel.X, oy = vel.Y, opx = pos.X, opy = pos.Y;
-
+            float tx = 0f, ty = 0f;
             if (_thrust.TryGetValue(owner.PeerId, out var thrust))
             {
-                vel.X += thrust.Dx * Accel * dt;
-                vel.Y += thrust.Dy * Accel * dt;
+                tx = thrust.Dx;
+                ty = thrust.Dy;
             }
 
-            float damp = MathF.Exp(-Friction * dt);
-            vel.X *= damp;
-            vel.Y *= damp;
-            ClampSpeed(ref vel);
-
-            pos.X += vel.X * dt;
-            pos.Y += vel.Y * dt;
-            pos.X = Math.Clamp(pos.X, -HalfExtent + PlayerRadius, HalfExtent - PlayerRadius);
-            pos.Y = Math.Clamp(pos.Y, -HalfExtent + PlayerRadius, HalfExtent - PlayerRadius);
+            IntegratePlayer(ref pos.X, ref pos.Y, ref vel.X, ref vel.Y, tx, ty, dt);
 
             if (vel.X != ox || vel.Y != oy)
                 world.MarkChanged<Vel>(e);
@@ -158,16 +189,5 @@ sealed class ArenaSim : IAuthoritativeSimulation
         float angle = index * (MathF.PI * 2f / total) - MathF.PI / 2f;
         const float r = 4f;
         return (MathF.Cos(angle) * r, MathF.Sin(angle) * r);
-    }
-
-    static void ClampSpeed(ref Vel vel)
-    {
-        float len = MathF.Sqrt(vel.X * vel.X + vel.Y * vel.Y);
-        if (len > MaxSpeed)
-        {
-            float s = MaxSpeed / len;
-            vel.X *= s;
-            vel.Y *= s;
-        }
     }
 }

@@ -33,7 +33,7 @@ static class Program
         using var session = new ArenaSession(players);
         session.JoinAll();
 
-        Console.WriteLine($"Arena Dots — {players} players, tick={ArenaSession.TickHz:0} Hz");
+        Console.WriteLine($"Arena Dots — {players} players, tick={ArenaSession.TickHz:0} Hz (predict + interpolate)");
         Console.WriteLine("Join complete. Server entities={0}", session.ServerWorld.EntityCount);
         for (int i = 0; i < session.Clients.Count; i++)
             Console.WriteLine("  client[{0}] peer={1} entities={2} tick={3}",
@@ -51,6 +51,7 @@ static class Program
     {
         Console.WriteLine("""
             Loom Arena Dots — authoritative multiplayer dots over loopback.
+            Local player is client-predicted; remotes/projectiles are interpolated.
 
               --players N   1–4 clients (default 2)
               --ticks N     console sim ticks (default 40)
@@ -95,20 +96,24 @@ static class Program
             Console.Write($"  server peer={owner.PeerId} pos=({pos.X,7:F2},{pos.Y,7:F2})");
             for (int c = 0; c < session.Clients.Count; c++)
             {
-                var cw = session.Clients[c].World;
-                if (!cw.IsAlive(e))
+                var view = session.Views[c];
+                if (view.TryGetRenderTransform(e, owner.PeerId, tickFraction: 0f, out var sample))
+                {
+                    float dx = sample.PosX - pos.X, dy = sample.PosY - pos.Y;
+                    string tag = owner.PeerId == view.LocalPeerId ? "pred" : "lerp";
+                    Console.Write($" | c{c}/{tag}=({sample.PosX,7:F2},{sample.PosY,7:F2}) d={MathF.Sqrt(dx * dx + dy * dy):F4}");
+                }
+                else
                 {
                     Console.Write($" | c{c}=missing");
-                    continue;
                 }
-
-                var cp = cw.Get<Pos>(e);
-                float dx = cp.X - pos.X, dy = cp.Y - pos.Y;
-                Console.Write($" | c{c}=({cp.X,7:F2},{cp.Y,7:F2}) d={MathF.Sqrt(dx * dx + dy * dy):F4}");
             }
 
             Console.WriteLine();
         });
+
+        var rec = session.Views[0].LastReconcile;
+        Console.WriteLine($"  c0 reconcile={rec.Kind} err={rec.Error:F4} replay={rec.Replayed}");
     }
 
     static int RunVisual(ArenaSession session)
@@ -116,7 +121,7 @@ static class Program
         const int width = 900;
         const int height = 900;
         Raylib.SetConfigFlags(ConfigFlags.Msaa4xHint);
-        Raylib.InitWindow(width, height, "Loom — Arena Dots");
+        Raylib.InitWindow(width, height, "Loom — Arena Dots (predict + interpolate)");
         Raylib.SetTargetFPS(60);
 
         float accumulator = 0f;
@@ -158,30 +163,43 @@ static class Program
                 session.Tick();
             }
 
+            float tickFraction = accumulator / ArenaSession.TickDt;
+            var view = session.Views[0];
+            var simWorld = view.Client.World;
+
             Raylib.BeginDrawing();
             Raylib.ClearBackground(new Color(18, 22, 28, 255));
 
-            var view = session.Clients[0].World;
             DrawArena(width, height);
 
-            view.Query().Each<Pos, Lifetime>((Entity _, ref Pos pos, ref Lifetime _) =>
+            simWorld.Query().Each<Pos, Lifetime>((Entity e, ref Pos _, ref Lifetime _) =>
             {
-                var (sx, sy) = WorldToScreen(pos.X, pos.Y, width, height);
+                if (!view.TryGetProjectileTransform(e, tickFraction, out var xf))
+                    return;
+                var (sx, sy) = WorldToScreen(xf.PosX, xf.PosY, width, height);
                 Raylib.DrawCircle((int)sx, (int)sy, 5f, new Color(240, 220, 90, 255));
             });
 
-            view.Query().Each<Pos, PlayerOwner>((Entity _, ref Pos pos, ref PlayerOwner owner) =>
+            simWorld.Query().Each<Pos, PlayerOwner>((Entity e, ref Pos _, ref PlayerOwner owner) =>
             {
+                if (!view.TryGetRenderTransform(e, owner.PeerId, tickFraction, out var xf))
+                    return;
                 int idx = Math.Clamp(owner.PeerId - 2, 0, colors.Length - 1);
-                var (sx, sy) = WorldToScreen(pos.X, pos.Y, width, height);
+                var (sx, sy) = WorldToScreen(xf.PosX, xf.PosY, width, height);
                 float r = ArenaSim.PlayerRadius * (width / (ArenaSim.HalfExtent * 2f));
                 Raylib.DrawCircle((int)sx, (int)sy, r, colors[idx]);
                 Raylib.DrawCircleLines((int)sx, (int)sy, r, Color.RayWhite);
+                if (owner.PeerId == view.LocalPeerId)
+                    Raylib.DrawCircleLines((int)sx, (int)sy, r + 3f, new Color(255, 255, 255, 120));
             });
 
+            var rec = view.LastReconcile;
             Raylib.DrawText(
-                $"tick={session.Clients[0].LastAppliedTick}  entities={view.EntityCount}  P1 WASD+Space  P2 arrows+Enter",
+                $"tick={view.Client.LastAppliedTick}  entities={simWorld.EntityCount}  reconcile={rec.Kind} err={rec.Error:F3}",
                 16, 16, 18, Color.RayWhite);
+            Raylib.DrawText(
+                "P1 WASD+Space (predicted)  P2 arrows+Enter (interpolated on P1 view)",
+                16, 40, 16, new Color(180, 190, 200, 255));
             Raylib.EndDrawing();
         }
 

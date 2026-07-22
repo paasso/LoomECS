@@ -14,10 +14,14 @@ Client                         Server (authoritative)
   |                              |
   |  NetCommand (input bytes)    |
   |----------------------------->|  NetCommandBuffer.DrainForTick
-  |                              |  NetworkClock fixed tick → simulate
+  |  ClientPredictor (local)     |  NetworkClock fixed tick → simulate
+  |                              |
   |  Snapshot (LCMP) or Delta    |
   |<-----------------------------|  SnapshotSync / DeltaSync.Capture
-  |  Apply / ReplaceFromMemoryPack
+  |  Apply → sim world           |
+  |  SnapshotBuffer (remotes)    |
+  |  Reconcile + replay unacked  |
+  |  StateInterpolator (render)  |
 ```
 
 | Type | Role |
@@ -31,7 +35,9 @@ Client                         Server (authoritative)
 | `DeltaSync` | Spawn/despawn + dirty component ops via `TrackEntityLifecycle` / `TrackChanges` (wire type ids = `DeterministicHash`) |
 | `NetMessage` | Optional kind+tick framing (`Snapshot`, `Delta`, `Command`, `SnapshotRequest`) |
 | `AuthoritativeServer` | Thin host: poll → tick → apply commands → sim → broadcast delta/snapshot |
-| `NetClient` | Send commands, request/apply snapshot, apply deltas |
+| `NetClient` | Send commands, request/apply snapshot, apply deltas; optional `AfterStateApplied` |
+| `NetTransform` / `SnapshotBuffer` / `StateInterpolator` | Render-side tick→transform buffer + lerp between ticks |
+| `PredictedInputBuffer` / `ClientPredictor<TState>` | Unacked input ring + predict / reconcile / replay |
 
 ## Snapshot apply on live clients
 
@@ -80,6 +86,31 @@ client.SendCommand(tick: 0, payload: /* opaque bytes */);
 // Host frame:
 server.Update(dt);   // or server.TickOnce() in tests
 client.Poll();       // apply snapshot/delta frames
+// Optional: client.AfterStateApplied = (world, tick, kind) => { /* buffer / reconcile */ };
+```
+
+### Client prediction + interpolation (MVP)
+
+Server remains authoritative. Clients may:
+
+1. **Predict** the owned entity with `ClientPredictor<TState>` using the **same** step function as the server sim.
+2. On each applied snapshot/delta (`NetClient.AfterStateApplied` / `LastAppliedTick`), **reconcile**: ack inputs through that tick, measure error, soft- or hard-correct, replay unacked commands.
+3. **Interpolate** remotes from a `SnapshotBuffer` via `StateInterpolator.TrySample(tick, alpha)` (or delayed render tick) — keep the replicated world as sim truth and sample separately for render.
+
+```csharp
+var buffer = new SnapshotBuffer(capacity: 32);
+var lerp = new StateInterpolator(buffer);
+var predictor = new ClientPredictor<MyState>(MySharedStep, deltaTime: 1f / 60f);
+predictor.Reset(initial);
+
+client.AfterStateApplied = (world, tick, kind) =>
+{
+    // Push remote transforms into buffer; reconcile owned entity from world components.
+};
+
+predictor.Predict(tick, payload);
+// render local: predictor.Predicted
+// render remote: lerp.TrySampleDelayed(delayTicks: 1.25f, tickFraction, entityId, out var xf);
 ```
 
 Each `AuthoritativeServer` tick: drop stale commands → drain/apply for that tick (stable client-id order) →
@@ -138,7 +169,7 @@ while (clientTransport.TryReceive(out var packet))
 
 ## Limitations
 
-- **No rollback / prediction** — clients apply authoritative state; prediction is your job if needed
+- **Prediction / interpolation are opt-in helpers** — `ClientPredictor` and `StateInterpolator` do not replace the authoritative sim world; mis-matched client/server step functions will desync until hard-correct
 - **No interest management / AOI** — snapshots and deltas are full-world
 - **No sockets** — `INetTransport` only; bring your own reliability/ordering if the wire needs it
 - **`Parallel*` / nondeterminism** — parallel iteration order is not a sync contract; keep authoritative sim deterministic
@@ -150,6 +181,7 @@ while (clientTransport.TryReceive(out var packet))
 - **Delta type ids** are `ComponentTypeTraits<T>.DeterministicHash` (int32). Snapshots stay name-based via WorldSerializer
 - **Adaptive compression** — `compress: true` means *allow* Brotli when payload ≥ threshold (default 256 B); tiny payloads stay LDLT / LCMP. Apply accepts both magics
 - Optional float3 wire packing: `NetFloat3Quantize` (3×Int16 or Half) at encode/decode boundary
+- Not a full DOTS NetCode ghost / rollback stack — no automatic command echo beyond the existing `NetMessage` tick stamp
 
 ## Install
 

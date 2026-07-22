@@ -6,7 +6,8 @@ namespace Loom.Net
     /// <summary>
     /// Thin client helper: enqueue opaque commands to the server and apply incoming
     /// snapshot/delta frames onto a local <see cref="World"/>.
-    /// No prediction or reconciliation — state is authoritative-apply only.
+    /// Prediction / interpolation live beside this type (<see cref="ClientPredictor{TState}"/>,
+    /// <see cref="StateInterpolator"/>) — sim world stays authoritative-apply; render samples separately.
     /// </summary>
     public sealed class NetClient
     {
@@ -47,6 +48,12 @@ namespace Loom.Net
 
         /// <summary>True after at least one snapshot was applied (deltas before that are ignored).</summary>
         public bool HasSnapshot => _hasSnapshot;
+
+        /// <summary>
+        /// Optional hook after a snapshot or delta is applied (<c>world</c>, tick, kind).
+        /// Use to push remote transforms into a <see cref="SnapshotBuffer"/> or run reconciliation.
+        /// </summary>
+        public Action<World, long, NetMessageKind>? AfterStateApplied { get; set; }
 
         /// <summary>Asks the server for a full snapshot (join / resync).</summary>
         public void RequestSnapshot()
@@ -90,6 +97,7 @@ namespace Loom.Net
                         _snapshots.ApplyFramed(_world, packet.Payload, out tick);
                         _hasSnapshot = true;
                         _lastAppliedTick = tick;
+                        AfterStateApplied?.Invoke(_world, tick, NetMessageKind.Snapshot);
                         handled++;
                         break;
 
@@ -98,6 +106,7 @@ namespace Loom.Net
                             break;
                         _deltas.ApplyFramed(_world, packet.Payload, out tick);
                         _lastAppliedTick = tick;
+                        AfterStateApplied?.Invoke(_world, tick, NetMessageKind.Delta);
                         handled++;
                         break;
                 }

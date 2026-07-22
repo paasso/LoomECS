@@ -6,6 +6,7 @@ namespace Loom.ArenaDots;
 /// <summary>
 /// Loopback multiplayer host: one <see cref="AuthoritativeServer"/> + N <see cref="NetClient"/>s.
 /// Spawns a player entity per join; later joins reach earlier clients via delta spawn.
+/// Each client gets an <see cref="ArenaClientView"/> for local prediction + remote interpolation.
 /// </summary>
 sealed class ArenaSession : IDisposable
 {
@@ -15,6 +16,7 @@ sealed class ArenaSession : IDisposable
     readonly ArenaSim _sim = new();
     readonly List<NetClient> _clients = new();
     readonly List<LoopbackTransport> _clientNets = new();
+    readonly List<ArenaClientView> _views = new();
     readonly LoopbackTransport _serverNet;
     readonly AuthoritativeServer _server;
     readonly SnapshotSync _snapshots;
@@ -57,12 +59,14 @@ sealed class ArenaSession : IDisposable
             var client = new NetClient(clientWorld, clientNet, _snapshots, _deltas, serverPeer: _serverNet.LocalId);
             _clientNets.Add(clientNet);
             _clients.Add(client);
+            _views.Add(new ArenaClientView(client, clientNet.LocalId.Value));
         }
     }
 
     public AuthoritativeServer Server => _server;
     public World ServerWorld => _server.World;
     public IReadOnlyList<NetClient> Clients => _clients;
+    public IReadOnlyList<ArenaClientView> Views => _views;
     public ArenaSim Sim => _sim;
 
     /// <summary>
@@ -112,15 +116,15 @@ sealed class ArenaSession : IDisposable
 
     public void SendMove(int clientIndex, long tick, float dx, float dy)
     {
-        _clients[clientIndex].SendCommand(tick, ArenaSim.EncodeMove(dx, dy));
+        _views[clientIndex].SendMoveAndPredict(tick, dx, dy);
     }
 
     public void SendFire(int clientIndex, long tick)
     {
-        _clients[clientIndex].SendCommand(tick, ArenaSim.EncodeFire());
+        _views[clientIndex].SendFire(tick);
     }
 
-    /// <summary>One authoritative tick + client apply.</summary>
+    /// <summary>One authoritative tick + client apply (reconcile + snapshot buffer push).</summary>
     public void Tick()
     {
         _server.TickOnce();
