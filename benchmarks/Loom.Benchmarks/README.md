@@ -34,3 +34,57 @@ Same payloads and counts everywhere (`float3`-ish structs). Methods return a che
 Sparse churn is only for ECS that store components outside archetypes (Loom `ISparseComponent`, Leo pools, DefaultEcs). Arch/Friflo would be measuring archetype moves there — that is already covered by the dense toggle.
 
 Shared interning is a Loom feature; there is nothing equivalent to compare.
+
+## Results
+
+Ryzen 5 7500F, .NET 10, BenchmarkDotNet Mean / Allocated.
+
+### Dense iteration (100k)
+
+| ECS | Mean | Allocated |
+| --- | ---: | ---: |
+| Friflo | **246.6 µs** | 88 B |
+| Loom | 250.7 µs | 88 B |
+| Leo | 254.7 µs | 0 B |
+| DefaultEcs | 287.4 µs | 0 B |
+| Arch | 792.3 µs | 32 B |
+
+### Filtered query
+
+| ECS | Mean | Allocated |
+| --- | ---: | ---: |
+| DefaultEcs | **182.8 µs** | 0 B |
+| Friflo | 184.7 µs | 88 B |
+| Leo | 186.2 µs | 0 B |
+| Loom | 190.3 µs | 88 B |
+| Arch | 509.9 µs | 32 B |
+
+### Bulk create ×3 (100k)
+
+| ECS | Mean | Allocated |
+| --- | ---: | ---: |
+| Friflo | **3.50 ms** | 16.0 MB |
+| Loom | 3.70 ms | **6.6 MB** |
+| Leo | 3.84 ms | 17.0 MB |
+| Arch | 7.14 ms | 7.3 MB |
+| DefaultEcs | 11.6 ms | 25.1 MB |
+
+### Dense `Status` toggle (10k)
+
+| ECS | Mean | Allocated |
+| --- | ---: | ---: |
+| Leo* | **91.3 µs** | 0 B |
+| DefaultEcs* | 170.8 µs | 0 B |
+| Loom | 211.9 µs | 0 B |
+| Friflo | 290.4 µs | 0 B |
+| Arch | 591.4 µs | 0 B |
+
+\*No archetype move (sparse-set style).
+
+### Sparse `Status` churn (10k)
+
+| ECS | Mean | Allocated |
+| --- | ---: | ---: |
+| Leo | **92.1 µs** | 0 B |
+| Loom | 159.0 µs | 0 B |
+| DefaultEcs | 176.0 µs | 0 B |

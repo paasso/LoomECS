@@ -123,15 +123,15 @@ world.Query().Each<MoveJob, Position, Velocity>(ref job);
 
 ## Benchmarks
 
-[BenchmarkDotNet](benchmarks/Loom.Benchmarks) vs Arch, DefaultEcs, Friflo, LeoECS Lite (Ryzen 5 7500F, .NET 10, Mean).
+[BenchmarkDotNet](benchmarks/Loom.Benchmarks) vs Arch, DefaultEcs, Friflo, LeoECS Lite (Ryzen 5 7500F, .NET 10). Mean / allocated.
 
 | | Loom | Friflo | Leo | DefaultEcs | Arch |
 |--|--:|--:|--:|--:|--:|
-| Dense iteration (100k) | 251 µs | **247 µs** | 255 µs | 287 µs | 792 µs |
-| Filtered query | 190 µs | 185 µs | 186 µs | **183 µs** | 510 µs |
-| Bulk create ×3 | 3.70 ms | **3.50 ms** | 3.84 ms | 11.6 ms | 7.14 ms |
-| Dense `Status` toggle (10k) | 212 µs | 290 µs | 91 µs* | 171 µs* | 591 µs |
-| Sparse `Status` churn (10k) | 159 µs | — | **92 µs** | 176 µs | — |
+| Dense iteration (100k) | 251 µs / 88 B | **247 µs** / 88 B | 255 µs / 0 B | 287 µs / 0 B | 792 µs / 32 B |
+| Filtered query | 190 µs / 88 B | 185 µs / 88 B | 186 µs / 0 B | **183 µs** / 0 B | 510 µs / 32 B |
+| Bulk create ×3 | 3.70 ms / **6.6 MB** | **3.50 ms** / 16.0 MB | 3.84 ms / 17.0 MB | 11.6 ms / 25.1 MB | 7.14 ms / 7.3 MB |
+| Dense `Status` toggle (10k) | 212 µs / 0 B | 290 µs / 0 B | 91 µs* / 0 B | 171 µs* / 0 B | 591 µs / 0 B |
+| Sparse `Status` churn (10k) | 159 µs / 0 B | — | **92 µs** / 0 B | 176 µs / 0 B | — |
 
 \*Leo / DefaultEcs toggle without archetype moves. Sparse churn is Loom / Leo / DefaultEcs only.
 
