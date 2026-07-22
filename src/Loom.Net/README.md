@@ -28,7 +28,7 @@ Client                         Server (authoritative)
 | `NetworkClock` / `NetworkTick` | Fixed-tick accumulator |
 | `NetCommandBuffer` | Client→server commands ordered by tick |
 | `SnapshotSync` | Full-world MemoryPack capture + live apply |
-| `DeltaSync` | Dirty component ops via `TrackChanges` |
+| `DeltaSync` | Dirty component ops via `TrackChanges` (wire type ids = `DeterministicHash`) |
 | `NetMessage` | Optional kind+tick framing |
 
 ## Snapshot apply on live clients
@@ -72,7 +72,8 @@ while (clock.TryAdvance(dt, out var tick))
     serverTransport.Broadcast(snapshots.CaptureFramed(serverWorld, tick.Index));
 
     // Or thin dirty path (entities must already exist on clients):
-    // serverTransport.Broadcast(deltas.CaptureFramed(serverWorld, tick.Index));
+    // if (deltas.TryCapture(serverWorld, out var delta) && delta.Length > 0)
+    //     serverTransport.Broadcast(NetMessage.Pack(NetMessageKind.Delta, tick.Index, delta));
     // serverWorld.ClearComponentChanges();
 }
 
@@ -97,6 +98,9 @@ while (clientTransport.TryReceive(out var packet))
 - **Delta is not structural** — entity create/destroy needs a snapshot (or your own spawn messages)
 - **In-place `Get` edits** are not tracked — use `Set` / `MarkChanged`
 - Capture deltas **before** `ClearComponentChanges` / end of `Tick`
+- **Empty deltas** — `TryCapture` returns false / `Capture` returns empty; skip the send (idle ≈ 0 B)
+- **Delta type ids** are `ComponentTypeTraits<T>.DeterministicHash` (int32). Snapshots stay name-based via WorldSerializer
+- Optional float3 wire packing: `NetFloat3Quantize` (3×Int16 or Half) at encode/decode boundary
 
 ## Install
 

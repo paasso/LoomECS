@@ -28,7 +28,7 @@ namespace Loom.Internal
     }
 
     /// <summary>Thrown when two distinct component types hash to the same
-    /// <see cref="ComponentTypeTraits{T}.DetermenisticHash"/> within one <see cref="World"/> — see
+    /// <see cref="ComponentTypeTraits{T}.DeterministicHash"/> within one <see cref="World"/> — see
     /// <see cref="ComponentTypeRegistry"/> for why this is checked instead of silently aliasing the
     /// two types.</summary>
     public sealed class ComponentHashCollisionException : InvalidOperationException
@@ -56,7 +56,7 @@ namespace Loom.Internal
     /// </summary>
     internal sealed class ComponentTypeRegistry
     {
-        // Keyed by ComponentTypeTraits<T>.DetermenisticHash rather than typeof(T) itself: the caller
+        // Keyed by ComponentTypeTraits<T>.DeterministicHash rather than typeof(T) itself: the caller
         // already has that hash sitting in a static readonly field (computed once per closed T, at
         // type-init time), so a lookup here is a raw int compare with no virtual
         // GetHashCode()/Equals() dispatch through System.Type. ClrType is still stored on
@@ -77,7 +77,7 @@ namespace Loom.Internal
             if (ReferenceEquals(LastHitCache<T>.Registry, this))
                 return LastHitCache<T>.Info!;
 
-            int hash = ComponentTypeTraits<T>.DetermenisticHash;
+            int hash = ComponentTypeTraits<T>.DeterministicHash;
             if (_byHash.TryGetValue(hash, out var existing))
             {
                 if (existing.ClrType != typeof(T))

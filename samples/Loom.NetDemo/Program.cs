@@ -64,9 +64,9 @@ static void RunLoopbackDemo()
                 // Full state on first tick (join).
                 serverNet.Broadcast(snapshots.CaptureFramed(serverWorld, tick.Index));
             }
-            else
+            else if (deltas.TryCapture(serverWorld, out var delta) && delta.Length > 0)
             {
-                serverNet.Broadcast(deltas.CaptureFramed(serverWorld, tick.Index));
+                serverNet.Broadcast(NetMessage.Pack(NetMessageKind.Delta, tick.Index, delta));
             }
 
             serverWorld.ClearComponentChanges();

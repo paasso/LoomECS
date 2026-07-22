@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Loom.Internal
 {
     /// <summary>
-    /// Process-wide record of every <c>ComponentTypeTraits&lt;T&gt;.DetermenisticHash</c> ever
+    /// Process-wide record of every <c>ComponentTypeTraits&lt;T&gt;.DeterministicHash</c> ever
     /// computed, mapped back to the <see cref="Type"/> it came from. A closed generic type's static
     /// constructor runs at most once for the whole process, so <see cref="RegisterOrThrow"/> — called
     /// from <see cref="ComponentTypeTraits{T}"/>'s static constructor — only ever runs once per T,

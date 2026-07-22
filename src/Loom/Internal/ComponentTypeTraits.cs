@@ -14,7 +14,7 @@ namespace Loom.Internal
     internal static class ComponentTypeTraits<T> where T : struct
     {
         public static readonly Type ComponentType = typeof(T);
-        public static readonly int DetermenisticHash = ComponentType.ComputeDeterministicHash();
+        public static readonly int DeterministicHash = ComponentType.ComputeDeterministicHash();
         public static readonly bool IsSparse = typeof(ISparseComponent).IsAssignableFrom(typeof(T));
         public static readonly bool IsShared = typeof(ISharedComponent).IsAssignableFrom(typeof(T));
         public static readonly bool IsRelation = typeof(IRelationComponent).IsAssignableFrom(typeof(T));
@@ -24,7 +24,7 @@ namespace Loom.Internal
         public static readonly bool UsesSparseMask = IsSparse || IsShared;
 
         // Field initializers above run before this explicit static constructor body (both are part
-        // of the same type initializer), so DetermenisticHash/ComponentType are already set here.
+        // of the same type initializer), so DeterministicHash/ComponentType are already set here.
         // Checking uniqueness at this point — once per closed T, for the whole process — catches a
         // collision the moment any two colliding component types are ever both touched, rather than
         // only when they happen to be registered in the same World (see ComponentTypeRegistry,
@@ -51,7 +51,7 @@ namespace Loom.Internal
                     $"Relation component '{ComponentType.FullName}' cannot also be {nameof(ISharedComponent)}.");
             }
 
-            ComponentTypeHashRegistry.RegisterOrThrow(DetermenisticHash, ComponentType);
+            ComponentTypeHashRegistry.RegisterOrThrow(DeterministicHash, ComponentType);
         }
 
         /// <summary>True when T has no instance fields — a pure tag/marker with no data

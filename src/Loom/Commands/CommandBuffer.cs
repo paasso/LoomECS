@@ -39,7 +39,7 @@ namespace Loom.Commands
             /// <summary>For Add: index into the typed value bag. For Remove: index into
             /// <see cref="_removeActions"/>. Unused for Create/Destroy.</summary>
             public int Payload;
-            /// <summary>For Add: <see cref="ComponentTypeTraits{T}.DetermenisticHash"/> of the
+            /// <summary>For Add: <see cref="ComponentTypeTraits{T}.DeterministicHash"/> of the
             /// component type (selects the value bag).</summary>
             public int TypeKey;
         }
@@ -85,7 +85,7 @@ namespace Loom.Commands
 
         public void Add<T>(Entity entity, T value = default) where T : struct
         {
-            int typeKey = ComponentTypeTraits<T>.DetermenisticHash;
+            int typeKey = ComponentTypeTraits<T>.DeterministicHash;
             if (!_addBags.TryGetValue(typeKey, out var bag))
             {
                 bag = new ValueBag<T>();
