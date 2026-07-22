@@ -4,7 +4,7 @@ using Loom.Entities;
 using Loom.Net;
 
 /// <summary>
-/// Measures MemoryPack snapshot / delta wire sizes for 100 entities with Position+Velocity.
+/// Measures MemoryPack snapshot / delta wire sizes for 100 entities with Pos+Vel (float3 each).
 /// Run: <c>dotnet run --project samples/Loom.NetDemo</c>
 /// </summary>
 static class TrafficProbe
@@ -14,14 +14,14 @@ static class TrafficProbe
     public static void Run()
     {
         var serializer = new WorldSerializer()
-            .Register<Position>()
-            .Register<Velocity>();
+            .Register<Pos>()
+            .Register<Vel>();
 
         var snapshots = new SnapshotSync(serializer, compress: false);
         var snapshotsBrotli = new SnapshotSync(serializer, compress: true);
         var deltas = new DeltaSync()
-            .Register<Position>()
-            .Register<Velocity>();
+            .Register<Pos>()
+            .Register<Vel>();
 
         var world = new World();
         deltas.EnableTracking(world);
@@ -30,8 +30,8 @@ static class TrafficProbe
         for (int i = 0; i < EntityCount; i++)
         {
             entities[i] = world.Create(
-                new Position { X = i, Y = i * 0.5f, Z = i * 0.25f },
-                new Velocity { X = 1f, Y = 0f, Z = -0.1f });
+                new Pos { X = i, Y = i * 0.1f, Z = i * 0.01f },
+                new Vel { X = 1f, Y = 0f, Z = 0f });
         }
 
         // Baseline full snapshot (join / resync). Clear create-time dirty lists first.
@@ -63,11 +63,11 @@ static class TrafficProbe
 
         world.ClearComponentChanges();
 
-        // 2) All 100 entities: Position + Velocity dirty via Set
+        // 2) All 100 entities: Pos + Vel dirty via Set
         for (int i = 0; i < EntityCount; i++)
         {
-            world.Set(entities[i], new Position { X = i + 1f, Y = i * 0.5f, Z = i * 0.25f });
-            world.Set(entities[i], new Velocity { X = 2f, Y = 0.1f, Z = -0.2f });
+            world.Set(entities[i], new Pos { X = i + 1f, Y = i * 0.2f, Z = i * 0.02f });
+            world.Set(entities[i], new Vel { X = 2f, Y = 1f, Z = 0.5f });
         }
 
         byte[] allDirty = deltas.Capture(world);
@@ -81,8 +81,8 @@ static class TrafficProbe
         const int subset = 10;
         for (int i = 0; i < subset; i++)
         {
-            world.Set(entities[i], new Position { X = i + 10f, Y = 1f, Z = 2f });
-            world.Set(entities[i], new Velocity { X = 3f, Y = 0f, Z = 0f });
+            world.Set(entities[i], new Pos { X = i + 10f, Y = 1f, Z = 2f });
+            world.Set(entities[i], new Vel { X = 3f, Y = 3f, Z = 3f });
         }
 
         byte[] subsetDirty = deltas.Capture(world);
@@ -99,7 +99,7 @@ static class TrafficProbe
 
         Console.WriteLine();
         Console.WriteLine("Notes:");
-        Console.WriteLine("  - Components: Position/Velocity each float X,Y,Z (12 B value).");
+        Console.WriteLine("  - Components: Pos/Vel each float3 (X,Y,Z = 12 B value), matching NetDemo.");
         Console.WriteLine("  - SnapshotSync default compress=false → LCMP (uncompressed MemoryPack).");
         Console.WriteLine("  - NetMessage framing = 1 byte kind + 8 byte tick = +9 bytes.");
         Console.WriteLine("  - DeltaSync LDLT: type names + entity id/version + MemoryPack payloads;");
@@ -109,7 +109,7 @@ static class TrafficProbe
 
     static void PrintHeader()
     {
-        Console.WriteLine($"=== Loom.Net traffic probe: {EntityCount} entities × Position+Velocity (float3) ===");
+        Console.WriteLine($"=== Loom.Net traffic probe: {EntityCount} entities × Pos+Vel (float3) ===");
         Console.WriteLine();
     }
 
@@ -125,14 +125,4 @@ static class TrafficProbe
         double b60 = bytes * 8.0 * 60 / 1_000_000.0;
         Console.WriteLine($"{label,-36} 20Hz={b20:F3}  30Hz={b30:F3}  60Hz={b60:F3} Mbps");
     }
-}
-
-struct Position
-{
-    public float X, Y, Z;
-}
-
-struct Velocity
-{
-    public float X, Y, Z;
 }
